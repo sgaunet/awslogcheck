@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 )
 
-// Recursive function that will return if the groupName parameter has been found
-func findLogGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupName string, NextToken string) bool {
+// Recursive function that will return if the groupName parameter has been found or not
+func (a *App) findLogGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupName string, NextToken string) bool {
 	var params cloudwatchlogs.DescribeLogGroupsInput
 
 	if len(NextToken) != 0 {
@@ -34,10 +34,12 @@ func findLogGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupName string,
 		return false
 	}
 
-	return findLogGroup(clientCloudwatchlogs, groupName, *res.NextToken)
+	return a.findLogGroup(clientCloudwatchlogs, groupName, *res.NextToken)
 }
 
-func parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupName string, nextToken string, minTimeStamp int64) {
+// Parse every events of every streams of a group
+// Recursive function
+func (a *App) parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupName string, nextToken string, minTimeStamp int64) error {
 	var paramsLogStream cloudwatchlogs.DescribeLogStreamsInput
 	var stopToParseLogStream bool
 
@@ -56,28 +58,28 @@ func parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupNa
 	// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs#Client.DescribeLogStreams
 	res2, err := clientCloudwatchlogs.DescribeLogStreams(context.TODO(), &paramsLogStream)
 	if err != nil {
-		fmt.Println(err.Error())
-		os.Exit(1)
+		return err
 	}
 
 	// Loop over streams
 	for _, j := range res2.LogStreams {
 		// fmt.Println(*j.LogStreamName)
 		// fmt.Println(*j.LastEventTimestamp)
-		//tm := time.Unix(*j.LastEventTimestamp/1000, 0) // aws timestamp are in ms
+		// tm := time.Unix(*j.LastEventTimestamp/1000, 0) // aws timestamp are in ms
 		// fmt.Printf("Parse stream : %s (Last event %v)\n", *j.LogStreamName, tm)
 
-		// No need to parse old logstream
+		// No need to parse old logstream older than minTimeStamp
 		if *j.LastEventTimestamp < minTimeStamp {
 			stopToParseLogStream = true
-			fmt.Printf("%v < %v\n", *j.LastEventTimestamp, minTimeStamp)
+			// fmt.Printf("%v < %v\n", *j.LastEventTimestamp, minTimeStamp)
 			break
 		}
 
-		getEvents(groupName, *j.LogStreamName, clientCloudwatchlogs, context.TODO())
+		a.getEvents(context.TODO(), groupName, *j.LogStreamName, clientCloudwatchlogs)
 	}
 
 	if res2.NextToken != nil && !stopToParseLogStream {
-		parseAllStreamsOfGroup(clientCloudwatchlogs, groupName, *res2.NextToken, minTimeStamp)
+		a.parseAllStreamsOfGroup(clientCloudwatchlogs, groupName, *res2.NextToken, minTimeStamp)
 	}
+	return nil
 }

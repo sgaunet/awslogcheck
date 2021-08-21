@@ -1,4 +1,4 @@
-package main
+package app
 
 // Format of the fluentd Docker logs
 type fluentDockerLog struct {

@@ -2,15 +2,14 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
-	"time"
+
+	"github.com/sgaunet/awslogcheck/app"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
@@ -42,12 +41,25 @@ func main() {
 	var groupName, ssoProfile string
 	var err error
 	var lastPeriodToWatch int
+	var configFilename string
+	var configApp app.AppConfig
 
 	// Treat args
 	flag.StringVar(&groupName, "g", "", "LogGroup to parse")
 	flag.StringVar(&ssoProfile, "p", "", "Auth by SSO")
 	flag.IntVar(&lastPeriodToWatch, "t", 600, "Time in s")
+	flag.StringVar(&configFilename, "c", "", "Directory containing patterns to ignore")
+
 	flag.Parse()
+
+	if configFilename != "" {
+		configApp, err = app.ReadYamlCnxFile(configFilename)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: %v\n", err.Error())
+			os.Exit(1)
+		}
+	}
+	app := app.New(configApp, lastPeriodToWatch)
 
 	// No profile selected
 	if len(ssoProfile) == 0 {
@@ -61,61 +73,15 @@ func main() {
 		)
 		checkErrorAndExitIfErr(err)
 	}
-
 	printID(cfg)
 
-	clientCloudwatchlogs := cloudwatchlogs.NewFromConfig(cfg)
-
-	doesGroupNameExists := findLogGroup(clientCloudwatchlogs, groupName, "")
-	if !doesGroupNameExists {
-		fmt.Printf("GroupName %s not found\n.", groupName)
-		os.Exit(1)
-	}
-
-	minTimeStamp := (time.Now().Unix() - int64(lastPeriodToWatch)) * 1000
-	parseAllStreamsOfGroup(clientCloudwatchlogs, groupName, "", minTimeStamp)
-}
-
-func getEvents(groupName string, streamName string, client *cloudwatchlogs.Client, context context.Context) {
-	now := time.Now().Unix() * 1000
-	start := now - 60000000
-	input := cloudwatchlogs.GetLogEventsInput{
-		LogGroupName:  &groupName,
-		LogStreamName: &streamName,
-		EndTime:       &now,
-		StartTime:     &start,
-	}
-
-	res, err := client.GetLogEvents(context, &input)
+	err = app.LoadRules()
 	if err != nil {
-		fmt.Println("Error", err.Error())
+		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, "Cannot load rules...")
 		os.Exit(1)
 	}
 
-	containerNamePrinted := false
-	for _, k := range res.Events {
-		// fmt.Println("##", *k.Message)
-		var lineOfLog fluentDockerLog
-		err := json.Unmarshal([]byte(*k.Message), &lineOfLog)
-		if err != nil {
-			fmt.Println("error numarshall")
-		}
-		// fmt.Println("LOG=>", toto.Log)
-		rules, err := loadRules("rules")
-		if err != nil {
-			panic(err)
-			os.Exit(1)
-		}
-		if !isLineMatchWithOneRule(lineOfLog.Log, rules) {
-			if !containerNamePrinted {
-				fmt.Printf("Parse stream : %s\n", streamName)
-				fmt.Printf("container image ==> %s\n", lineOfLog.Kubernetes.ContainerImage)
-				containerNamePrinted = true
-			}
-			fmt.Printf("LINE: %s\n", lineOfLog.Log)
-		}
-	}
-	if containerNamePrinted {
-		fmt.Println("")
-	}
+	app.LogCheck(cfg, groupName)
+
 }
