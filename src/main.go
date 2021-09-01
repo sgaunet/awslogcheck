@@ -36,8 +36,15 @@ func printID(cfg aws.Config) {
 	)
 }
 
+var version string = "development"
+
+func printVersion() {
+	fmt.Println(version)
+}
+
 func main() {
 	var cfg aws.Config // Configuration to connect to AWS API
+	var vOption bool
 	var groupName, ssoProfile string
 	var err error
 	var lastPeriodToWatch int
@@ -45,12 +52,18 @@ func main() {
 	var configApp app.AppConfig
 
 	// Treat args
+	flag.BoolVar(&vOption, "v", false, "Get version")
 	flag.StringVar(&groupName, "g", "", "LogGroup to parse")
 	flag.StringVar(&ssoProfile, "p", "", "Auth by SSO")
 	flag.IntVar(&lastPeriodToWatch, "t", 600, "Time in s")
 	flag.StringVar(&configFilename, "c", "", "Directory containing patterns to ignore")
 
 	flag.Parse()
+
+	if vOption {
+		printVersion()
+		os.Exit(0)
+	}
 
 	if configFilename != "" {
 		configApp, err = app.ReadYamlCnxFile(configFilename)
