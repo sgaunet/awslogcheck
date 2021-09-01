@@ -29,12 +29,16 @@ func (a *App) findLogGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupNam
 		}
 	}
 
-	if len(*res.NextToken) == 0 {
+	//if res.NextToken != nil {
+	if res.NextToken == nil {
 		// No token given, end of potential recursive call to parse the list of loggroups
 		return false
+	} else {
+		return a.findLogGroup(clientCloudwatchlogs, groupName, *res.NextToken)
 	}
+	//}
 
-	return a.findLogGroup(clientCloudwatchlogs, groupName, *res.NextToken)
+	//return a.findLogGroup(clientCloudwatchlogs, groupName, "")
 }
 
 // Parse every events of every streams of a group
