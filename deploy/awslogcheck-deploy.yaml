@@ -1,0 +1,50 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: awslogcheck
+  annotations:
+    kubernetes.io/change-cause: Creation
+spec:
+  replicas: 1
+    
+  selector:
+    matchLabels:
+      app: awslogcheck
+  template:
+    metadata:
+      labels:
+        app: awslogcheck
+    spec:
+      containers:
+      - name: app
+        image: sgaunet/awslogcheck:latest
+        envFrom:
+          - configMapRef:
+              name: cm-awslogcheck-conf
+        volumeMounts:
+          - name: config-volume
+            mountPath: /opt/awslogcheck/cfg.yaml
+            subPath: cfg.yaml
+          - name: rules-volume
+            mountPath: /opt/awslogcheck/rules-perso
+            #subPath: cfg.yaml
+
+        resources:
+          requests:
+            memory: "50Mi"
+            cpu: "50m"
+          limits:
+            memory: "70Mi"
+            cpu: "100m"
+        imagePullPolicy: Always
+
+      volumes:
+        - name: config-volume
+          configMap:
+            name: cm-awslogcheck
+        - name: rules-volume
+          configMap:
+            name: cm-awslogcheck-rules
+
+      restartPolicy: Always

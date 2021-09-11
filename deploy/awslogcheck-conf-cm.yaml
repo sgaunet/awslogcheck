@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm-awslogcheck-conf
+data:
+  MAILGUN_APIKEY: ""
+  MAILGUN_DOMAIN: "...mailgun.org"
+  MAILGROM: ""
+  MAILTO: ""
+  SUBJECT: "awslogcheck"
+  AWS_REGION: eu-west-3
+  LOGGROUP: "/aws/containerinsights/dev-EKS/application"

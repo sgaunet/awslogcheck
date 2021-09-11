@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm-awslogcheck-rules
+data:
+  general.rules: |
+    [info]
+    warning
+    WARNING
+    level=info
+    Successfully Reconciled
+    ^\s+$
+  autoscaler.rules: |
+    NodeGetCapabilities
+  http.rules: |
+    GET / HTTP/1.1" 302
+    GET / 200
+  wms.rules: |
+    HTTP/1.1" 200
+    Req:.*map\[\]
+  weard.rules: |
+    ^\.\.
+    ^\+\+
