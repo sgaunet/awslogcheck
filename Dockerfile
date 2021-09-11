@@ -1,4 +1,4 @@
-FROM sgaunet/mdtohtml:0.3.1 AS mdtohtml
+FROM sgaunet/mdtohtml:0.5.1 AS mdtohtml
 
 FROM golang:1.16.7-alpine AS builder
 LABEL stage=builder
@@ -16,7 +16,7 @@ RUN upx awslogcheck
 
 
 
-FROM alpine:3.13.3 AS final
+FROM alpine:3.14.2 AS final
 LABEL maintainer="Sylvain Gaunet <sgaunet@gmail.com>"
 
 RUN apk add --no-cache curl bash
@@ -36,11 +36,6 @@ RUN apk add --update --no-cache ca-certificates curl \
     && chmod +x "${SUPERCRONIC_PACKAGE}" \
     && mv "${SUPERCRONIC_PACKAGE}" "/bin/${SUPERCRONIC_PACKAGE}" \
     && ln -s "/bin/${SUPERCRONIC_PACKAGE}" /bin/supercronic 
-    # \
-# remove unwanted deps & cleanup
-    #&& apk del --purge ca-certificates curl \
-    #&& rm -rf /tmp/* /var/cache/apk/*
-
 
 WORKDIR /opt/awslogcheck
 COPY --from=builder /go/src/awslogcheck .
