@@ -13,7 +13,9 @@ import (
 const RULESDIR = "rules"
 
 type AppConfig struct {
-	RulesDir string `yaml:"rulesdir"`
+	RulesDir              string   `yaml:"rulesdir"`
+	ImagesToIgnore        []string `yaml:"imagesToIgnore"`
+	ContainerNameToIgnore []string `yaml:"containerNameToIgnore"`
 }
 
 func ReadYamlCnxFile(filename string) (AppConfig, error) {

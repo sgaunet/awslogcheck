@@ -63,7 +63,8 @@ func (a *App) LoadRules() error {
 }
 
 // getEvents parse events of a stream and print results that do not match with any rules on stdout
-func (a *App) getEvents(context context.Context, groupName string, streamName string, client *cloudwatchlogs.Client) {
+func (a *App) getEvents(context context.Context, groupName string, streamName string, client *cloudwatchlogs.Client) int {
+	var cptLinePrinted int
 	now := time.Now().Unix() * 1000
 	start := now - int64((a.lastPeriodToWatch * 1000))
 	input := cloudwatchlogs.GetLogEventsInput{
@@ -93,18 +94,62 @@ func (a *App) getEvents(context context.Context, groupName string, streamName st
 		// 	panic(err)
 		// 	os.Exit(1)
 		// }
+		var hasBeenChecked, imageIgnored, containerToIgnore bool
 		if !isLineMatchWithOneRule(lineOfLog.Log, a.rules) {
-			if !containerNamePrinted {
-				fmt.Printf("Parse stream : %s\n", streamName)
-				fmt.Printf("container image ==> %s\n", lineOfLog.Kubernetes.ContainerImage)
-				containerNamePrinted = true
+			if !hasBeenChecked {
+				imageIgnored = a.isImageIgnored(lineOfLog.Kubernetes.ContainerImage)
+				containerToIgnore = a.isContainerIgnored(lineOfLog.Kubernetes.ContainerName)
+				hasBeenChecked = true
 			}
-			fmt.Printf("LINE: %s\n", lineOfLog.Log)
+			if !imageIgnored && !containerToIgnore {
+				if !containerNamePrinted {
+					fmt.Printf("**Parse stream** : %s\n", streamName)
+					fmt.Printf("**container image** : %s\n", lineOfLog.Kubernetes.ContainerImage)
+					fmt.Printf("**container name** : %s\n", lineOfLog.Kubernetes.ContainerName)
+					// fmt.Println("*******************************************************")
+					// fmt.Println(lineOfLog.Kubernetes)
+					// fmt.Println("*******************************************************")
+					// Tester ici si container fait parti de la liste a ignorer
+					containerNamePrinted = true
+				}
+				fmt.Printf("LINE: %s\n", lineOfLog.Log)
+				cptLinePrinted++
+			} else {
+				// Log of this image can be ignored so stop the loop over events
+				break
+			}
 		}
 	}
 	if containerNamePrinted {
 		fmt.Println("")
 	}
+	return cptLinePrinted
+}
+
+func (a *App) isImageIgnored(imageToCheck string) bool {
+	for _, imgToIgnore := range a.cfg.ImagesToIgnore {
+		r := regexp.MustCompile(imgToIgnore)
+		if r.MatchString(imageToCheck) {
+			// fmt.Printf("%s compared to %s : MATCH\n", imageToCheck, imgToIgnore)
+			return true
+			// } else {
+			// 	fmt.Printf("%s compared to %s : DO NOT MATCH\n", imageToCheck, imgToIgnore)
+		}
+	}
+	return false
+}
+
+func (a *App) isContainerIgnored(containerToCheck string) bool {
+	for _, containerToIgnore := range a.cfg.ContainerNameToIgnore {
+		r := regexp.MustCompile(containerToIgnore)
+		if r.MatchString(containerToCheck) {
+			// fmt.Printf("%s compared to %s : MATCH\n", containerToCheck, containerToIgnore)
+			return true
+			// } else {
+			// 	fmt.Printf("%s compared to %s : DO NOT MATCH\n", containerToCheck, containerToIgnore)
+		}
+	}
+	return false
 }
 
 func isLineMatchWithOneRule(line string, rules []string) bool {

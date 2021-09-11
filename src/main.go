@@ -29,7 +29,7 @@ func printID(cfg aws.Config) {
 	)
 	checkErrorAndExitIfErr(err)
 	fmt.Printf(
-		"Account: %s\nUserID: %s\nARN: %s\n",
+		"Account: %s\nUserID: %s\nARN: %s\n\n",
 		aws.ToString(identity.Account),
 		aws.ToString(identity.UserId),
 		aws.ToString(identity.Arn),
@@ -43,6 +43,7 @@ func printVersion() {
 }
 
 func main() {
+	var cptLinePrinted int
 	var cfg aws.Config // Configuration to connect to AWS API
 	var vOption bool
 	var groupName, ssoProfile string
@@ -95,6 +96,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	app.LogCheck(cfg, groupName)
+	err, cptLinePrinted = app.LogCheck(cfg, groupName)
+	if err != nil {
+		fmt.Printf("<span style=\"color:red\">GroupName %s not found </span>", groupName)
+	}
+	if cptLinePrinted == 0 {
+		fmt.Println("<span style=\"color:red\">Every logs have been filtered </span>", groupName)
+		os.Exit(200)
+	}
+
+	fmt.Printf("cptLinePrinted=%d\n", cptLinePrinted)
 
 }
