@@ -112,7 +112,8 @@ func (a *App) getEvents(context context.Context, groupName string, streamName st
 					// Tester ici si container fait parti de la liste a ignorer
 					containerNamePrinted = true
 				}
-				fmt.Printf("LINE: %s\n", lineOfLog.Log)
+				timeT := time.Unix(*k.Timestamp/1000, 0)
+				fmt.Printf("%s: %s\n", timeT, lineOfLog.Log)
 				cptLinePrinted++
 			} else {
 				// Log of this image can be ignored so stop the loop over events
