@@ -14,7 +14,9 @@ func (a *App) LogCheck(cfg aws.Config, groupName string) (error, int) {
 
 	doesGroupNameExists := a.findLogGroup(clientCloudwatchlogs, groupName, "")
 	if !doesGroupNameExists {
-		return fmt.Errorf("GroupName %s not found\n.", groupName), 0
+		err := fmt.Errorf("GroupName %s not found", groupName)
+		a.appLog.Errorln(err.Error())
+		return err, 0
 	}
 
 	minTimeStampInMs := (time.Now().Unix() - int64(a.lastPeriodToWatch)) * 1000

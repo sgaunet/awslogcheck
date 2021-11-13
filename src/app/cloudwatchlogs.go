@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 )
@@ -18,7 +19,7 @@ func (a *App) findLogGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupNam
 
 	res, err := clientCloudwatchlogs.DescribeLogGroups(context.TODO(), &params)
 	if err != nil {
-		fmt.Println(err.Error())
+		a.appLog.Errorln(err.Error())
 		os.Exit(1)
 	}
 
@@ -68,15 +69,15 @@ func (a *App) parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client
 
 	// Loop over streams
 	for _, j := range res2.LogStreams {
-		// fmt.Println(*j.LogStreamName)
-		// fmt.Println(*j.LastEventTimestamp)
-		// tm := time.Unix(*j.LastEventTimestamp/1000, 0) // aws timestamp are in ms
-		// fmt.Printf("Parse stream : %s (Last event %v)\n", *j.LogStreamName, tm)
+		a.appLog.Debugln("Stream Name: ", *j.LogStreamName)
+		a.appLog.Debugln("LasteventTimeStamp: ", *j.LastEventTimestamp)
+		tm := time.Unix(*j.LastEventTimestamp/1000, 0) // aws timestamp are in ms
+		a.appLog.Debugf("Parse stream : %s (Last event %v)\n", *j.LogStreamName, tm)
 
 		// No need to parse old logstream older than minTimeStamp
 		if *j.LastEventTimestamp < minTimeStamp {
 			stopToParseLogStream = true
-			// fmt.Printf("%v < %v\n", *j.LastEventTimestamp, minTimeStamp)
+			a.appLog.Debugf("%v < %v\n", *j.LastEventTimestamp, minTimeStamp)
 			break
 		}
 

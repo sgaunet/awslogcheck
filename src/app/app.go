@@ -12,17 +12,21 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/sirupsen/logrus"
 )
 
 type App struct {
 	cfg               AppConfig
 	rules             []string
 	lastPeriodToWatch int
+	appLog            *logrus.Logger
 }
 
-func New(cfg AppConfig, lastPeriodToWatch int) *App {
+func New(cfg AppConfig, lastPeriodToWatch int, log *logrus.Logger) *App {
 	app := App{cfg: cfg,
-		lastPeriodToWatch: lastPeriodToWatch}
+		lastPeriodToWatch: lastPeriodToWatch,
+		appLog:            log,
+	}
 	return &app
 }
 
@@ -76,7 +80,7 @@ func (a *App) getEvents(context context.Context, groupName string, streamName st
 
 	res, err := client.GetLogEvents(context, &input)
 	if err != nil {
-		fmt.Println("Error", err.Error())
+		a.appLog.Errorln("Error", err.Error())
 		os.Exit(1)
 	}
 
@@ -86,7 +90,7 @@ func (a *App) getEvents(context context.Context, groupName string, streamName st
 		var lineOfLog fluentDockerLog
 		err := json.Unmarshal([]byte(*k.Message), &lineOfLog)
 		if err != nil {
-			fmt.Println("error numarshall")
+			a.appLog.Errorln("error numarshall")
 		}
 		// fmt.Println("LOG=>", toto.Log)
 		// rules, err := loadRules("rules")
@@ -159,10 +163,10 @@ func isLineMatchWithOneRule(line string, rules []string) bool {
 		r := regexp.MustCompile(rule)
 
 		if r.MatchString(line) {
-			//fmt.Printf("MATCH rule %s // line %s\n", rule, line)
+			logrus.Debugf("MATCH rule %s // line %s\n", rule, line)
 			return true
 		}
 	}
-	//fmt.Printf("line %s MATHC AUCUNE REGLE\n", line)
+	logrus.Debugf("line %s MATCH NO RULES\n", line)
 	return false
 }

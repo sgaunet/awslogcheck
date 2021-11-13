@@ -11,7 +11,35 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/sirupsen/logrus"
 )
+
+func initTrace(debugLevel string) *logrus.Logger {
+	appLog := logrus.New()
+	// Log as JSON instead of the default ASCII formatter.
+	//log.SetFormatter(&log.JSONFormatter{})
+	appLog.SetFormatter(&logrus.TextFormatter{
+		DisableColors:    false,
+		FullTimestamp:    false,
+		DisableTimestamp: true,
+	})
+
+	// Output to stdout instead of the default stderr
+	// Can be any io.Writer, see below for File example
+	appLog.SetOutput(os.Stdout)
+
+	switch debugLevel {
+	case "info":
+		appLog.SetLevel(logrus.InfoLevel)
+	case "warn":
+		appLog.SetLevel(logrus.WarnLevel)
+	case "error":
+		appLog.SetLevel(logrus.ErrorLevel)
+	default:
+		appLog.SetLevel(logrus.DebugLevel)
+	}
+	return appLog
+}
 
 func checkErrorAndExitIfErr(err error) {
 	if err != nil {
@@ -58,8 +86,10 @@ func main() {
 	flag.StringVar(&ssoProfile, "p", "", "Auth by SSO")
 	flag.IntVar(&lastPeriodToWatch, "t", 600, "Time in s")
 	flag.StringVar(&configFilename, "c", "", "Directory containing patterns to ignore")
-
 	flag.Parse()
+
+	appLog := initTrace(os.Getenv("DEBUGLEVEL"))
+	fmt.Println("log level=", appLog.Level)
 
 	if vOption {
 		printVersion()
@@ -69,11 +99,11 @@ func main() {
 	if configFilename != "" {
 		configApp, err = app.ReadYamlCnxFile(configFilename)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: %v\n", err.Error())
+			logrus.Errorf("ERROR: %v\n", err.Error())
 			os.Exit(1)
 		}
 	}
-	app := app.New(configApp, lastPeriodToWatch)
+	app := app.New(configApp, lastPeriodToWatch, appLog)
 
 	// No profile selected
 	if len(ssoProfile) == 0 {
@@ -91,8 +121,8 @@ func main() {
 
 	err = app.LoadRules()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		fmt.Fprintln(os.Stderr, "Cannot load rules...")
+		logrus.Errorln(err)
+		logrus.Errorln("Cannot load rules...")
 		os.Exit(1)
 	}
 
@@ -105,6 +135,6 @@ func main() {
 		os.Exit(200)
 	}
 
-	fmt.Printf("cptLinePrinted=%d\n", cptLinePrinted)
+	logrus.Infoln("cptLinePrinted=%d\n", cptLinePrinted)
 
 }
