@@ -4,7 +4,6 @@ metadata:
   name: cm-awslogcheck-rules
 data:
   general.rules: |
-    [info]
     warning
     WARNING
     level=info
