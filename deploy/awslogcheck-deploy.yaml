@@ -5,6 +5,7 @@ metadata:
   name: awslogcheck
   annotations:
     kubernetes.io/change-cause: Creation
+    reloader.stakater.com/auto: "true"
 spec:
   replicas: 1
     
@@ -32,10 +33,10 @@ spec:
 
         resources:
           requests:
-            memory: "50Mi"
+            memory: "150Mi"
             cpu: "50m"
           limits:
-            memory: "70Mi"
+            memory: "200Mi"
             cpu: "100m"
         imagePullPolicy: Always
 

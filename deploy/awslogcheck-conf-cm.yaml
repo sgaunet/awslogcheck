@@ -10,3 +10,4 @@ data:
   SUBJECT: "awslogcheck"
   AWS_REGION: eu-west-3
   LOGGROUP: "/aws/containerinsights/dev-EKS/application"
+  DEBUGLEVEL: "warn"

@@ -17,6 +17,3 @@ data:
   wms.rules: |
     HTTP/1.1" 200
     Req:.*map\[\]
-  weard.rules: |
-    ^\.\.
-    ^\+\+
