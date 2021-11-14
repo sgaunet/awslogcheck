@@ -1,6 +1,6 @@
 FROM sgaunet/mdtohtml:0.5.1 AS mdtohtml
 
-FROM golang:1.16.7-alpine AS builder
+FROM golang:1.17.3-alpine AS builder
 LABEL stage=builder
 
 RUN apk add --no-cache upx 
@@ -9,7 +9,7 @@ COPY  src/ /go/src/
 WORKDIR /go/src/
 
 RUN echo $GOPATH
-RUN go get 
+RUN go mod download
 RUN CGO_ENABLED=0 GOOS=linux go build . 
 RUN upx awslogcheck
 

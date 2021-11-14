@@ -3,7 +3,7 @@
 before:
   hooks:
     # You may remove this if you don't use go modules.
-    - go get
+    # - go mod download
     # you may remove this if you don't need go generate
     #- go generate ./...
 builds:
@@ -22,6 +22,15 @@ builds:
     goarm:
       - 6
       - 7
+    ignore:
+      - goos: darwin
+        goarch: 386
+      - goos: windows
+        goarch: arm
+        goarm: 7
+      - goos: windows
+        goarch: arm
+        goarm: 6
     dir: src
     hooks:
       post:
