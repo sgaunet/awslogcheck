@@ -1,0 +1,8 @@
+---
+rulesdir: "/home/sylvain/GITHUB/PUBLIC/awslogcheck/tst/rules"
+#ignoreImages:
+imagesToIgnore:
+  - fluent/fluentd-kubernetes-daemonset
+  - 602401143452.dkr.ecr.eu-west-3.amazonaws.com/eks/kube-proxy
+containerNameToIgnore:
+  - aws-vpc-cni-init

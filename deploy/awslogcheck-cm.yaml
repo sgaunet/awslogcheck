@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cm-awslogcheck
+data:
+  cfg.yaml: |
+    ---
+    rulesdir: "/opt/awslogcheck/rules-perso"
+    imagesToIgnore:
+      - fluent/fluentd-kubernetes-daemonset
+      - 602401143452.dkr.ecr.eu-west-3.amazonaws.com/eks/kube-proxy
+      #- registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper
+      - docker:stable
+      - docker:dind
+    containerNameToIgnore:
+      - aws-vpc-cni-init
+      - helper
+      - build
+      - svc-0
+      - liveness-probe
+      - csi-provisioner
+      - csi-attacher
+      - cluster-autoscaler
+    
