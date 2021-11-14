@@ -1,6 +1,5 @@
 # awslogcheck
 
-It's actually a draft (under development), consider it as a POC for the instant.
 The purpose is to create a tool to parse cloudwatch logs and get a mail report with all occurences that doesn't match with regexp given (like logcheck but for AWS EKS application, considering that logs are stored in cloudwatch thanks to fluentd).
 
 Actually, the program can connect to AWS API through SSO profile or get the default config (need to give permissions to the EC2 that will run the program).
@@ -39,9 +38,11 @@ AWS_REGION: eu-west-3
 LOGGROUP: "/aws/containerinsights/dev-EKS/application"
 ```
 
-Every environment vars are mandatory. The loggroup should be the loggroup created by fluentd deployment. awslogcheck won't be able to check another structure of event.
+Every environment vars are mandatory. The loggroup should be the loggroup created by fluentd deployment. awslogcheck won't be able to check another structure of events.
 
 ![loggroup](img/log-groups.png)
+
+How to write regexp ? You can use [https://regex101.com/](https://regex101.com/) to check your regexp (golang regexp).
 
 # Deployment in kubernetes
 
