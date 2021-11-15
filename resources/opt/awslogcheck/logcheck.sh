@@ -1,5 +1,6 @@
 #!/bin/bash
 
+source /opt/awslogcheck/check-smtp-conf.sh # Will export CFG_MAILGUN and CFG_SMTP
 
 echo "Launch awslogcheck" 
 echo "------------------"
@@ -28,4 +29,12 @@ then
   echo "Error occurend when executing mdtohtml" | tee /tmp/result.html
 fi
 
-cat /tmp/result.html | curl -s --user "api:${MAILGUN_APIKEY}" https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages -F from="${MAILGROM}" -F to="${MAILTO}" -F subject=${SUBJECT} -F html="<-" "$@"
+if [ "$CFG_MAILGUN" = "0" ]
+then
+  cat /tmp/result.html | curl -s --user "api:${MAILGUN_APIKEY}" https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages -F from="${FROM_EMAIL}" -F to="${MAILTO}" -F subject=${SUBJECT} -F html="<-" "$@"
+fi
+
+if [ "$CFG_SMTP" = "0" ]
+then
+  mutt -e "set content_type=text/html" -s "$SUBJECT" -- ${MAILTO} < /tmp/result.html
+fi

@@ -3,9 +3,19 @@ kind: ConfigMap
 metadata:
   name: cm-awslogcheck-conf
 data:
+  # Send mail report with MAILGUN
   MAILGUN_APIKEY: ""
   MAILGUN_DOMAIN: "...mailgun.org"
-  MAILGROM: ""
+
+  # Or via SMTP SERVER
+  SMTP_SERVER: email-smtp.eu-central-1.amazonaws.com
+  SMTP_PORT: "587"
+  SMTP_LOGIN: "..."
+  SMTP_PASSWORD: "..."
+  FROM_EMAIL: production@meteorage.com
+  REALNAME: Production Meteorage
+
+
   MAILTO: ""
   SUBJECT: "awslogcheck"
   AWS_REGION: eu-west-3

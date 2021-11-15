@@ -19,7 +19,7 @@ RUN upx awslogcheck
 FROM alpine:3.14.2 AS final
 LABEL maintainer="Sylvain Gaunet <sgaunet@gmail.com>"
 
-RUN apk add --no-cache curl bash
+RUN apk add --no-cache curl bash mutt cyrus-sasl-login
 RUN addgroup -S logcheck_group -g 1000 && adduser -S logcheck -G logcheck_group --uid 1000
 
 ENV SUPERCRONIC_VERSION="v0.1.11" \
@@ -45,4 +45,4 @@ COPY "resources" /
 USER logcheck
 
 ENTRYPOINT ["/opt/awslogcheck/entrypoint.sh"]
-CMD ["supercronic","-debug","/app/cron"]
+CMD ["supercronic","/app/cron"]
