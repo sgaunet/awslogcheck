@@ -4,7 +4,7 @@ The purpose is to create a tool to parse cloudwatch logs and get a mail report w
 
 Actually, the program can connect to AWS API through SSO profile or get the default config (need to give permissions to the EC2 that will run the program).
 
-awslogcheck will be spawned every hour and if there are logs that do not fit with rules, you will get an email (Need a mailgun account or an SMTP server (tls)).
+With the docker image, awslogcheck will be spawned every hour and if there are logs that do not fit with rules, you will get an email (Need a mailgun account or an SMTP server (tls)).
 
 # Configuration
 
@@ -42,13 +42,38 @@ Every environment vars are mandatory. The loggroup should be the loggroup create
 
 ![loggroup](img/log-groups.png)
 
-How to write regexp ? You can use [https://regex101.com/](https://regex101.com/) to check your regexp (golang regexp).
+
+## Execution 
+
+### EKS (docker image)
+
+Check the deploy folder to launch in kubernetes. 
+
+### In command line (SSO)
+
+Login into and specify the profile to use with option -p :
+
+```
+aws sso login --profile dev
+awslogcheck  -g /aws/containerinsights/dev-EKS/application -t 3600 -c cfg.yml -p dev
+```
+
+### In command line (EC2)
+
+You probably will have to set AWS_REGION :
+
+```
+export AWS_REGION=eu-west-3
+awslogcheck  -g /aws/containerinsights/dev-EKS/application -t 3600 -c cfg.yml
+```
+
+Set the role below to get permissions from your EC2 to browse logs.
 
 ## Role for EC2
 
-The program need permissions to consult cloudwatch. **I haven't tried to restrict to the minimum for now.**
+The program need permissions to consult cloudwatch. 
 
-Policy example (**do better and tell me**):
+Policy example :
 
 ```
 {
@@ -56,9 +81,10 @@ Policy example (**do better and tell me**):
     "Statement": [
         {
             "Effect": "Allow",
-            "Action": [
-                "logs:*",
-            ],
+            "Action": [ 
+                            "logs:DescribeLogStreams",
+                            "logs:GetLogEvents",
+                            "logs:DescribeLogGroups"],
             "Resource": "*"
         }
     ]
@@ -91,4 +117,15 @@ You have manifests example in the deploy folder.
 This tool uses the aws sdk golang v2. [Here is the doc.](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2)
 
 [Most of API calls use cloudwatchlogs.](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs)
+
+# FAQ
+
+If you have error like (when using the SSO) :
+
+```
+ERROR: operation error STS: GetCallerIdentity, failed to sign request: failed to retrieve credentials: the SSO session has expired or is invalid: expected RFC3339 timestamp: parsing time "2021-11-18T15:55:16UTC" as "2006-01-02T15:04:05Z07:00": cannot parse "UTC" as "Z07:00"
+exit status 1
+```
+
+[Update awscli](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 

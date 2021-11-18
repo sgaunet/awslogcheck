@@ -12,8 +12,8 @@ data:
   SMTP_PORT: "587"
   SMTP_LOGIN: "..."
   SMTP_PASSWORD: "..."
-  FROM_EMAIL: production@meteorage.com
-  REALNAME: Production Meteorage
+  FROM_EMAIL: production@society.com
+  REALNAME: Production
 
 
   MAILTO: ""
