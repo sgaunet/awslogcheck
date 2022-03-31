@@ -4,15 +4,22 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/sgaunet/awslogcheck/app"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/robfig/cron"
 	"github.com/sirupsen/logrus"
 )
+
+const ingestionTimeS int = 120
 
 func initTrace(debugLevel string) *logrus.Logger {
 	appLog := logrus.New()
@@ -43,7 +50,7 @@ func initTrace(debugLevel string) *logrus.Logger {
 
 func checkErrorAndExitIfErr(err error) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR: %s\n", err.Error())
+		fmt.Fprintf(os.Stderr, "ERROR-: %s\n", err.Error())
 		os.Exit(1)
 	}
 }
@@ -76,20 +83,19 @@ func main() {
 	var vOption bool
 	var groupName, ssoProfile string
 	var err error
-	var lastPeriodToWatch int
 	var configFilename string
 	var configApp app.AppConfig
+	sigs := make(chan os.Signal, 1)
 
 	// Treat args
 	flag.BoolVar(&vOption, "v", false, "Get version")
 	flag.StringVar(&groupName, "g", "", "LogGroup to parse")
 	flag.StringVar(&ssoProfile, "p", "", "Auth by SSO")
-	flag.IntVar(&lastPeriodToWatch, "t", 600, "Time in s")
 	flag.StringVar(&configFilename, "c", "", "Directory containing patterns to ignore")
 	flag.Parse()
 
 	appLog := initTrace(os.Getenv("DEBUGLEVEL"))
-	fmt.Println("log level=", appLog.Level)
+	appLog.Infoln("appLog.Level=", appLog.Level)
 
 	if vOption {
 		printVersion()
@@ -103,11 +109,11 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	app := app.New(configApp, lastPeriodToWatch, appLog)
+	app := app.New(configApp, 3600, appLog) // 3600 is the number of second since now to parse logs
 
 	// No profile selected
 	if len(ssoProfile) == 0 {
-		cfg, err = config.LoadDefaultConfig(context.TODO())
+		cfg, err = config.LoadDefaultConfig(context.TODO(), config.WithRegion("eu-west-3"))
 		checkErrorAndExitIfErr(err)
 	} else {
 		// Try to connect with the SSO profile put in parameter
@@ -126,15 +132,53 @@ func main() {
 		os.Exit(1)
 	}
 
-	err, cptLinePrinted = app.LogCheck(cfg, groupName)
-	if err != nil {
-		fmt.Printf("<span style=\"color:red\">GroupName %s not found </span>", groupName)
-	}
-	if cptLinePrinted == 0 {
-		fmt.Println("<span style=\"color:red\">Every logs have been filtered </span>", groupName)
-		os.Exit(200)
+	if groupName == "" {
+		// groupname not specified in command line, try to get it with env var
+		groupName = os.Getenv("LOGGROUP")
+		if groupName == "" {
+			logrus.Errorln("No LOGGROUP specified. Set LOGGROUP env var or use the option -g")
+			os.Exit(1)
+		}
 	}
 
-	logrus.Infoln("cptLinePrinted=%d\n", cptLinePrinted)
+	c := cron.New()
+	// second minute hour day month
+	c.AddFunc("0 0 * * *", func() {
+		freport := "/tmp/report.html"
+		time.Sleep(time.Duration(ingestionTimeS) * time.Second) // Wait the time for the ingestion time of logs
 
+		cptLinePrinted, err = app.LogCheck(cfg, groupName, freport)
+		if err != nil {
+			logrus.Errorln(err.Error())
+			os.Exit(1)
+		}
+		if cptLinePrinted == 0 {
+			logrus.Infof("Every logs have been filtered (%s)\n", groupName)
+		} else {
+			body, err := ioutil.ReadFile(freport)
+			if err != nil {
+				logrus.Errorln(err.Error())
+			}
+			if isMailGunConfigured(os.Getenv("MAILGUN_DOMAIN"), os.Getenv("MAILGUN_APIKEY")) {
+				err = sendMailWithMailgun(os.Getenv("MAILGUN_DOMAIN"), os.Getenv("MAILGUN_APIKEY"), os.Getenv("FROM_EMAIL"), os.Getenv("SUBJECT"), string(body), os.Getenv("MAILTO"))
+				if err != nil {
+					logrus.Errorln(err.Error())
+				}
+			}
+			if isSmtpConfigured(os.Getenv("SMTP_LOGIN"), os.Getenv("SMTP_PASSWORD"), os.Getenv("SMTP_SERVER")+":"+os.Getenv("SMTP_PORT")) {
+				err = sendSmtpMail(os.Getenv("FROM_EMAIL"), os.Getenv("MAILTO"), os.Getenv("SUBJECT"), string(body), os.Getenv("SMTP_LOGIN"), os.Getenv("SMTP_PASSWORD"), os.Getenv("SMTP_SERVER")+":"+os.Getenv("SMTP_PORT"), true)
+				if err != nil {
+					logrus.Errorln(err.Error())
+				}
+			}
+		}
+		err = os.Remove(freport)
+		if err != nil {
+			logrus.Errorln(err.Error())
+		}
+	})
+	c.Start()
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	<-sigs
+	c.Stop()
 }

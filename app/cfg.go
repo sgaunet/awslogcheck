@@ -13,9 +13,24 @@ import (
 const RULESDIR = "rules"
 
 type AppConfig struct {
-	RulesDir              string   `yaml:"rulesdir"`
-	ImagesToIgnore        []string `yaml:"imagesToIgnore"`
-	ContainerNameToIgnore []string `yaml:"containerNameToIgnore"`
+	RulesDir              string        `yaml:"rulesdir"`
+	ImagesToIgnore        []string      `yaml:"imagesToIgnore"`
+	ContainerNameToIgnore []string      `yaml:"containerNameToIgnore"`
+	SmtpConfig            smtpConfig    `yaml:"smtp"`
+	MailgunConfig         MailGunConfig `yaml:"mailgun"`
+}
+
+type MailGunConfig struct {
+	Domain string `yaml:"domain"`
+	ApiKey string `yaml:"apikey"`
+}
+
+type smtpConfig struct {
+	Server   string `yaml:"server"`
+	Port     int    `yaml:"port"`
+	Login    string `yaml:"login"`
+	Password string `yaml:"password"`
+	Tls      bool   `yaml:"tls"`
 }
 
 func ReadYamlCnxFile(filename string) (AppConfig, error) {

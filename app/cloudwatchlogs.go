@@ -44,7 +44,7 @@ func (a *App) findLogGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupNam
 
 // Parse every events of every streams of a group
 // Recursive function
-func (a *App) parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupName string, nextToken string, minTimeStamp int64) (error, int) {
+func (a *App) parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupName string, nextToken string, minTimeStamp int64, maxTimeStamp int64, f *os.File) (int, error) {
 	var cptLinePrinted int
 	var paramsLogStream cloudwatchlogs.DescribeLogStreamsInput
 	var stopToParseLogStream bool
@@ -64,7 +64,7 @@ func (a *App) parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client
 	// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs#Client.DescribeLogStreams
 	res2, err := clientCloudwatchlogs.DescribeLogStreams(context.TODO(), &paramsLogStream)
 	if err != nil {
-		return err, cptLinePrinted
+		return cptLinePrinted, err
 	}
 
 	// Loop over streams
@@ -81,15 +81,16 @@ func (a *App) parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client
 			break
 		}
 
-		cptLinePrinted += a.getEvents(context.TODO(), groupName, *j.LogStreamName, clientCloudwatchlogs)
+		c := a.getEvents(context.TODO(), groupName, *j.LogStreamName, clientCloudwatchlogs, f)
+		cptLinePrinted += c
 	}
 
 	if res2.NextToken != nil && !stopToParseLogStream {
-		err, cpt := a.parseAllStreamsOfGroup(clientCloudwatchlogs, groupName, *res2.NextToken, minTimeStamp)
+		cpt, err := a.parseAllStreamsOfGroup(clientCloudwatchlogs, groupName, *res2.NextToken, minTimeStamp, maxTimeStamp, f)
 		cptLinePrinted += cpt
 		if err != nil {
-			return err, cptLinePrinted
+			return cpt, err
 		}
 	}
-	return nil, cptLinePrinted
+	return cptLinePrinted, err
 }
