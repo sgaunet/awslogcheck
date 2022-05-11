@@ -11,6 +11,11 @@ tasks:
       - CGO_ENABLED=0 go build .
       - upx ./{{.BINFILE}}
     # silent: true
+    sources:
+      - smtp-tls.go
+      - main.go
+      - go*
+      - app/*.go
     method: checksum
     generates:
       - "{{.BINFILE}}"
