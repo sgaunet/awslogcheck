@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
@@ -66,7 +67,7 @@ func (a *App) LoadRules() error {
 }
 
 // getEvents parse events of a stream and return results that do not match with any rules on stdout
-func (a *App) getEvents(context context.Context, groupName string, streamName string, client *cloudwatchlogs.Client, f *os.File) (cptLinePrinted int) {
+func (a *App) getEvents(context context.Context, groupName string, streamName string, client *cloudwatchlogs.Client, f *os.File, nextToken string) (cptLinePrinted int) {
 	now := time.Now().Unix() * 1000
 	start := now - int64((a.lastPeriodToWatch * 1000))
 	input := cloudwatchlogs.GetLogEventsInput{
@@ -74,6 +75,14 @@ func (a *App) getEvents(context context.Context, groupName string, streamName st
 		LogStreamName: &streamName,
 		EndTime:       &now,
 		StartTime:     &start,
+	}
+
+	if nextToken == "" {
+		input.NextToken = nil
+		a.appLog.Debugln("getEvents", groupName, streamName)
+	} else {
+		input.NextToken = &nextToken
+		a.appLog.Debugln("getEvents", groupName, streamName, nextToken)
 	}
 
 	res, err := client.GetLogEvents(context, &input)
@@ -121,6 +130,14 @@ func (a *App) getEvents(context context.Context, groupName string, streamName st
 		// fmt.Println("")
 		f.WriteString("<br>\n")
 	}
+	a.appLog.Debugln("nextToken             =", nextToken)
+	// a.appLog.Debugln("*res.NextForwardToken =", *res.NextForwardToken)
+	a.appLog.Debugln("*res.NextBackwardToken=", *res.NextBackwardToken)
+
+	if *res.NextBackwardToken != nextToken {
+		time.Sleep(100 * time.Millisecond)
+		return cptLinePrinted + a.getEvents(context, groupName, streamName, client, f, *res.NextBackwardToken)
+	}
 	return cptLinePrinted
 }
 
@@ -148,6 +165,20 @@ func (a *App) isContainerIgnored(containerToCheck string) bool {
 		}
 	}
 	return false
+}
+
+func (a *App) PrintMemoryStats(stop <-chan interface{}) {
+	for {
+		select {
+		case <-stop:
+			return
+		default:
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			a.appLog.Debugf("\nAlloc = %v\nTotalAlloc = %v\nSys = %v\nNumGC = %v\n\n", m.Alloc/1024, m.TotalAlloc/1024, m.Sys/1024, m.NumGC)
+			time.Sleep(5 * time.Second)
+		}
+	}
 }
 
 func isLineMatchWithOneRule(line string, rules []string) bool {

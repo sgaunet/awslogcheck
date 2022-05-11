@@ -81,7 +81,7 @@ func (a *App) parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client
 			break
 		}
 
-		c := a.getEvents(context.TODO(), groupName, *j.LogStreamName, clientCloudwatchlogs, f)
+		c := a.getEvents(context.TODO(), groupName, *j.LogStreamName, clientCloudwatchlogs, f, "")
 		cptLinePrinted += c
 	}
 
