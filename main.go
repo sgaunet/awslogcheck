@@ -147,11 +147,21 @@ func main() {
 		freport := "/tmp/report.html"
 		time.Sleep(time.Duration(ingestionTimeS) * time.Second) // Wait the time for the ingestion time of logs
 
+		// if debug mode, launch goroutine to print memory stats
+		// if os.Getenv("DEBUGLEVEL") == "debug" {
+		// 	stop = make(chan interface{})
+		// 	go app.PrintMemoryStats(stop)
+		// }
+
+		logrus.Debugln("Start Logcheck")
 		cptLinePrinted, err = app.LogCheck(cfg, groupName, freport)
 		if err != nil {
 			logrus.Errorln(err.Error())
 			os.Exit(1)
 		}
+		logrus.Debugln("End Logcheck")
+		logrus.Debugln("cptLinePrinted=", cptLinePrinted)
+
 		if cptLinePrinted == 0 {
 			logrus.Infof("Every logs have been filtered (%s)\n", groupName)
 		} else {
@@ -160,18 +170,21 @@ func main() {
 				logrus.Errorln(err.Error())
 			}
 			if isMailGunConfigured(os.Getenv("MAILGUN_DOMAIN"), os.Getenv("MAILGUN_APIKEY")) {
+				logrus.Debugln("Mail with mailgun")
 				err = sendMailWithMailgun(os.Getenv("MAILGUN_DOMAIN"), os.Getenv("MAILGUN_APIKEY"), os.Getenv("FROM_EMAIL"), os.Getenv("SUBJECT"), string(body), os.Getenv("MAILTO"))
 				if err != nil {
 					logrus.Errorln(err.Error())
 				}
 			}
 			if isSmtpConfigured(os.Getenv("SMTP_LOGIN"), os.Getenv("SMTP_PASSWORD"), os.Getenv("SMTP_SERVER")+":"+os.Getenv("SMTP_PORT")) {
+				logrus.Debugln("Mail with smtp")
 				err = sendSmtpMail(os.Getenv("FROM_EMAIL"), os.Getenv("MAILTO"), os.Getenv("SUBJECT"), string(body), os.Getenv("SMTP_LOGIN"), os.Getenv("SMTP_PASSWORD"), os.Getenv("SMTP_SERVER")+":"+os.Getenv("SMTP_PORT"), true)
 				if err != nil {
 					logrus.Errorln(err.Error())
 				}
 			}
 		}
+		logrus.Debugln("Remove report")
 		err = os.Remove(freport)
 		if err != nil {
 			logrus.Errorln(err.Error())
