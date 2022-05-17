@@ -25,17 +25,17 @@ builds:
     hooks:
       post:
         - upx "{{ .Path }}"
-archives:
-  - name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
-    replacements:
-      darwin: Darwin
-      linux: Linux
-      windows: Windows
-      386: i386
-      amd64: x86_64
-    format_overrides:
-    - goos: windows
-      format: zip
+# archives:
+#   - name_template: '{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}'
+#     replacements:
+#       darwin: Darwin
+#       linux: Linux
+#       windows: Windows
+#       386: i386
+#       amd64: x86_64
+#     format_overrides:
+#     - goos: windows
+#       format: zip
 checksum:
   name_template: 'checksums.txt'
 snapshot:
@@ -79,7 +79,7 @@ dockers:
   - use: buildx
     goos: linux
     goarch: arm
-    goarm: 6
+    goarm: "6"
     image_templates:
       - "sgaunet/{{ .ProjectName }}:{{ .Version }}-armv6"
       - "sgaunet/{{ .ProjectName }}:latest-armv6"
@@ -96,7 +96,7 @@ dockers:
   - use: buildx
     goos: linux
     goarch: arm
-    goarm: 7
+    goarm: "7"
     image_templates:
       - "sgaunet/{{ .ProjectName }}:{{ .Version }}-armv7"
       - "sgaunet/{{ .ProjectName }}:latest-armv7"
