@@ -2,7 +2,7 @@
 
 The purpose is to create a tool to parse cloudwatch logs and get a mail report with all occurences that doesn't match with regexp given (like logcheck but for AWS EKS application, considering that logs are stored in cloudwatch thanks to fluentd).
 
-Actually, the program can connect to AWS API through SSO profile (dedicated for dev/test) or get the default config (need to give permissions to the EC2 that will run the program).
+Actually, the program can connect to AWS API through SSO profile or get the default config (need to give permissions to the EC2 that will run the program).
 
 The check is done every hour. If there are logs that do not fit with rules, you will get an email (Need a mailgun account or an SMTP server).
 
@@ -154,8 +154,6 @@ This project is using :
 ```
 task
 ```
-
-To use for development and test.
 
 ## Build the image
 
