@@ -10,6 +10,7 @@ require (
 	github.com/mailgun/mailgun-go/v4 v4.6.1
 	github.com/robfig/cron v1.2.0
 	github.com/sgaunet/calcdate/calcdate v0.0.0-20220108124356-12ceff09b8d0
+	github.com/sgaunet/ratelimit v0.1.0
 	github.com/sirupsen/logrus v1.8.1
 	gopkg.in/yaml.v2 v2.4.0
 )

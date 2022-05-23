@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/sgaunet/ratelimit"
 	"github.com/sirupsen/logrus"
 )
 
@@ -21,12 +22,16 @@ type App struct {
 	rules             []string
 	lastPeriodToWatch int
 	appLog            *logrus.Logger
+	rateLimit         *ratelimit.RateLimit
 }
+
+const awsCloudWatchRateLimit = 20
 
 func New(cfg AppConfig, lastPeriodToWatch int, log *logrus.Logger) *App {
 	app := App{cfg: cfg,
 		lastPeriodToWatch: lastPeriodToWatch,
 		appLog:            log,
+		rateLimit:         ratelimit.New(1*time.Second, awsCloudWatchRateLimit),
 	}
 	return &app
 }
@@ -85,6 +90,7 @@ func (a *App) getEvents(context context.Context, groupName string, streamName st
 		a.appLog.Debugln("getEvents", groupName, streamName, nextToken)
 	}
 
+	a.rateLimit.WaitIfLimitReached()
 	res, err := client.GetLogEvents(context, &input)
 	if err != nil {
 		a.appLog.Errorln("Error", err.Error())

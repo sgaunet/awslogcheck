@@ -17,6 +17,7 @@ func (a *App) findLogGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupNam
 		params.NextToken = &NextToken
 	}
 
+	a.rateLimit.WaitIfLimitReached()
 	res, err := clientCloudwatchlogs.DescribeLogGroups(context.TODO(), &params)
 	if err != nil {
 		a.appLog.Errorln(err.Error())
@@ -62,6 +63,7 @@ func (a *App) parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client
 	}
 
 	// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs#Client.DescribeLogStreams
+	a.rateLimit.WaitIfLimitReached()
 	res2, err := clientCloudwatchlogs.DescribeLogStreams(context.TODO(), &paramsLogStream)
 	if err != nil {
 		return cptLinePrinted, err
