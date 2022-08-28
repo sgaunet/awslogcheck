@@ -43,7 +43,7 @@ func (a *App) LoadRules() error {
 		return err
 	}
 	if rulesDir == "" {
-		return errors.New("No rules folder found")
+		return errors.New("no rules folder found")
 	}
 
 	_, err = os.Stat(rulesDir)
@@ -189,12 +189,14 @@ func (a *App) PrintMemoryStats(stop <-chan interface{}) {
 
 func isLineMatchWithOneRule(line string, rules []string) bool {
 	for _, rule := range rules {
-		//fmt.Printf("rule=%s\n", rule)
-		r := regexp.MustCompile(rule)
-
-		if r.MatchString(line) {
-			logrus.Debugf("MATCH rule %s // line %s\n", rule, line)
-			return true
+		r, err := regexp.Compile(rule)
+		if err != nil {
+			logrus.Errorf("rule %s is incorrect", rule)
+		} else {
+			if r.MatchString(line) {
+				logrus.Debugf("MATCH rule %s // line %s\n", rule, line)
+				return true
+			}
 		}
 	}
 	logrus.Debugf("line %s MATCH NO RULES\n", line)
