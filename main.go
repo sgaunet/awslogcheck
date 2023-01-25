@@ -85,7 +85,7 @@ func main() {
 	var err error
 	var configFilename string
 	var configApp app.AppConfig
-	sigs := make(chan os.Signal, 1)
+	sigs := make(chan os.Signal, 5)
 
 	// Treat args
 	flag.BoolVar(&vOption, "v", false, "Get version")
@@ -109,7 +109,9 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	app := app.New(configApp, 3600, appLog) // 3600 is the number of second since now to parse logs
+	ctx := context.Background()
+	ctx, cancel := context.WithCancel(ctx)
+	app := app.New(ctx, configApp, 3600, appLog) // 3600 is the number of second since now to parse logs
 
 	// No profile selected
 	if len(ssoProfile) == 0 {
@@ -193,5 +195,11 @@ func main() {
 	c.Start()
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
+	cancel()
 	c.Stop()
+	time.Sleep(1 * time.Second)
+	// buf := make([]byte, 1<<16)
+	// runtime.Stack(buf, true)
+	// fmt.Printf("%s", buf)
+
 }

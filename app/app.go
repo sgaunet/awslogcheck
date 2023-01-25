@@ -27,11 +27,12 @@ type App struct {
 
 const awsCloudWatchRateLimit = 20
 
-func New(cfg AppConfig, lastPeriodToWatch int, log *logrus.Logger) *App {
+func New(ctx context.Context, cfg AppConfig, lastPeriodToWatch int, log *logrus.Logger) *App {
+	r, _ := ratelimit.New(ctx, 1*time.Second, awsCloudWatchRateLimit)
 	app := App{cfg: cfg,
 		lastPeriodToWatch: lastPeriodToWatch,
 		appLog:            log,
-		rateLimit:         ratelimit.New(1*time.Second, awsCloudWatchRateLimit),
+		rateLimit:         r,
 	}
 	return &app
 }
