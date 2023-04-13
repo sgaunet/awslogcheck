@@ -11,14 +11,14 @@ tasks:
       - CGO_ENABLED=0 go build .
       - upx ./{{.BINFILE}}
     # silent: true
-    sources:
-      - smtp-tls.go
-      - main.go
-      - go*
-      - app/*.go
-    method: checksum
-    generates:
-      - "{{.BINFILE}}"
+    # sources:
+    #   - smtp-tls.go
+    #   - main.go
+    #   - go*
+    #   - app/*.go
+    # method: checksum
+    # generates:
+    #   - "{{.BINFILE}}"
 
   image:
     deps: 
@@ -33,8 +33,8 @@ tasks:
 
   snapshot:
     cmds:
-      - GITLAB_TOKEN="" goreleaser --rm-dist --snapshot
+      - GITLAB_TOKEN="" goreleaser --clean --snapshot
     
   release:
     cmds:
-      - GITLAB_TOKEN="" goreleaser --rm-dist
+      - GITLAB_TOKEN="" goreleaser --clean
