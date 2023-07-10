@@ -12,40 +12,31 @@ import (
 // Recursive function that will return if the groupName parameter has been found or not
 func (a *App) findLogGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupName string, NextToken string) bool {
 	var params cloudwatchlogs.DescribeLogGroupsInput
-
 	if len(NextToken) != 0 {
 		params.NextToken = &NextToken
 	}
-
 	a.rateLimit.WaitIfLimitReached()
 	res, err := clientCloudwatchlogs.DescribeLogGroups(context.TODO(), &params)
 	if err != nil {
 		a.appLog.Errorln(err.Error())
 		os.Exit(1)
 	}
-
 	for _, i := range res.LogGroups {
 		fmt.Printf("## Parse Log Group Name : %s\n", *i.LogGroupName)
 		if *i.LogGroupName == groupName {
 			return true
 		}
 	}
-
-	//if res.NextToken != nil {
 	if res.NextToken == nil {
 		// No token given, end of potential recursive call to parse the list of loggroups
 		return false
-	} else {
-		return a.findLogGroup(clientCloudwatchlogs, groupName, *res.NextToken)
 	}
-	//}
-
-	//return a.findLogGroup(clientCloudwatchlogs, groupName, "")
+	return a.findLogGroup(clientCloudwatchlogs, groupName, *res.NextToken)
 }
 
 // Parse every events of every streams of a group
 // Recursive function
-func (a *App) parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupName string, nextToken string, minTimeStamp int64, maxTimeStamp int64, f *os.File) (int, error) {
+func (a *App) parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupName string, nextToken string, minTimeStamp int64, maxTimeStamp int64, chLogLines chan<- string) (int, error) {
 	var cptLinePrinted int
 	var paramsLogStream cloudwatchlogs.DescribeLogStreamsInput
 	var stopToParseLogStream bool
@@ -82,13 +73,12 @@ func (a *App) parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client
 			a.appLog.Debugf("%v < %v\n", *j.LastEventTimestamp, minTimeStamp)
 			break
 		}
-
-		c := a.getEvents(context.TODO(), groupName, *j.LogStreamName, clientCloudwatchlogs, f, "")
+		c := a.getEvents(context.TODO(), groupName, *j.LogStreamName, clientCloudwatchlogs, chLogLines, "")
 		cptLinePrinted += c
 	}
 
 	if res2.NextToken != nil && !stopToParseLogStream {
-		cpt, err := a.parseAllStreamsOfGroup(clientCloudwatchlogs, groupName, *res2.NextToken, minTimeStamp, maxTimeStamp, f)
+		cpt, err := a.parseAllStreamsOfGroup(clientCloudwatchlogs, groupName, *res2.NextToken, minTimeStamp, maxTimeStamp, chLogLines)
 		cptLinePrinted += cpt
 		if err != nil {
 			return cpt, err

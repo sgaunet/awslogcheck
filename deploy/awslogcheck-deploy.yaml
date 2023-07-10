@@ -20,9 +20,6 @@ spec:
       containers:
       - name: app
         image: sgaunet/awslogcheck:latest
-        envFrom:
-          - configMapRef:
-              name: cm-awslogcheck-conf
         volumeMounts:
           - name: config-volume
             mountPath: /opt/awslogcheck/cfg.yaml

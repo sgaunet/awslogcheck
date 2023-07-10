@@ -6,10 +6,27 @@ data:
   cfg.yaml: |
     ---
     rulesdir: "/opt/awslogcheck/rules-perso"
+    smtp:
+      server: ""
+      port: 465
+      login: ""
+      password: ""
+      tls: ""
+      maxreportsize: 10000000  # max size in bytes of report
+    mailgun: 
+      domain: ""
+      apikey: ""
+    mailconfiguration:
+      from_email: production@society.com
+      sendto: ""
+      subject: "awslogcheck"
+    aws_region: eu-west-3
+    loggroup: "/aws/containerinsights/dev-EKS/application"
+    debuglevel: "warn"
+
     imagesToIgnore:
       - fluent/fluentd-kubernetes-daemonset
       - 602401143452.dkr.ecr.eu-west-3.amazonaws.com/eks/kube-proxy
-      #- registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper
       - docker:stable
       - docker:dind
     containerNameToIgnore:

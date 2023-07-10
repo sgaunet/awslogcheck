@@ -12,13 +12,18 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	"github.com/sgaunet/awslogcheck/internal/configapp"
+	mailgunservice "github.com/sgaunet/awslogcheck/internal/mailservice/mailgunService"
+	smtpservice "github.com/sgaunet/awslogcheck/internal/mailservice/smtpService"
 	"github.com/sgaunet/ratelimit"
 	"github.com/sirupsen/logrus"
 )
 
 type App struct {
-	cfg               AppConfig
+	cfg               configapp.AppConfig
+	awscfg            aws.Config
 	rules             []string
 	lastPeriodToWatch int
 	appLog            *logrus.Logger
@@ -27,9 +32,11 @@ type App struct {
 
 const awsCloudWatchRateLimit = 20
 
-func New(ctx context.Context, cfg AppConfig, lastPeriodToWatch int, log *logrus.Logger) *App {
+func New(ctx context.Context, cfg configapp.AppConfig, awscfg aws.Config, lastPeriodToWatch int, log *logrus.Logger) *App {
 	r, _ := ratelimit.New(ctx, 1*time.Second, awsCloudWatchRateLimit)
-	app := App{cfg: cfg,
+	app := App{
+		cfg:               cfg,
+		awscfg:            awscfg,
 		lastPeriodToWatch: lastPeriodToWatch,
 		appLog:            log,
 		rateLimit:         r,
@@ -53,7 +60,6 @@ func (a *App) LoadRules() error {
 	}
 	err = filepath.Walk(rulesDir,
 		func(pathitem string, info os.FileInfo, err error) error {
-
 			if !info.IsDir() {
 				ruleFile, _ := os.Open(pathitem)
 				defer ruleFile.Close()
@@ -64,7 +70,6 @@ func (a *App) LoadRules() error {
 					//fmt.Println("====", scanner.Text())
 					a.rules = append(a.rules, scanner.Text())
 				}
-
 			}
 			return err
 		})
@@ -73,7 +78,7 @@ func (a *App) LoadRules() error {
 }
 
 // getEvents parse events of a stream and return results that do not match with any rules on stdout
-func (a *App) getEvents(context context.Context, groupName string, streamName string, client *cloudwatchlogs.Client, f *os.File, nextToken string) (cptLinePrinted int) {
+func (a *App) getEvents(context context.Context, groupName string, streamName string, client *cloudwatchlogs.Client, chLogLines chan<- string, nextToken string) (cptLinePrinted int) {
 	now := time.Now().Unix() * 1000
 	start := now - int64((a.lastPeriodToWatch * 1000))
 	input := cloudwatchlogs.GetLogEventsInput{
@@ -101,11 +106,12 @@ func (a *App) getEvents(context context.Context, groupName string, streamName st
 	containerNamePrinted := false
 	for _, k := range res.Events {
 		var lineOfLog fluentDockerLog
+		// a.appLog.Debugln("*k.message             =", *k.Message)
 		err := json.Unmarshal([]byte(*k.Message), &lineOfLog)
 		if err != nil {
 			a.appLog.Errorln(err.Error())
-			f.WriteString(err.Error())
 		}
+		// a.appLog.Debugf("ContainerName=%v  ContainerImage=%v\n", lineOfLog.Kubernetes.ContainerName, lineOfLog.Kubernetes.ContainerImage)
 		var hasBeenChecked, imageIgnored, containerToIgnore bool
 		if !isLineMatchWithOneRule(lineOfLog.Log, a.rules) {
 			if !hasBeenChecked {
@@ -113,37 +119,33 @@ func (a *App) getEvents(context context.Context, groupName string, streamName st
 				containerToIgnore = a.isContainerIgnored(lineOfLog.Kubernetes.ContainerName)
 				hasBeenChecked = true
 			}
+			// a.appLog.Debugf("imageIgnored=%v containerToIgnore=%v\n", imageIgnored, containerToIgnore)
 			if !imageIgnored && !containerToIgnore {
 				if !containerNamePrinted {
 					// fmt.Printf("**Parse stream** : %s\n", streamName)
 					// fmt.Printf("**container image** : %s\n", lineOfLog.Kubernetes.ContainerImage)
 					// fmt.Printf("**container name** : %s\n", lineOfLog.Kubernetes.ContainerName)
-					f.WriteString("<b>Parse stream</b> :" + streamName + "<br>")
-					f.WriteString("<b>Container Image</b> :" + lineOfLog.Kubernetes.ContainerImage + "<br>")
-					f.WriteString("<b>Container Name</b> :" + lineOfLog.Kubernetes.ContainerName + "<br>")
+					a.appLog.Debugf("Parse stream=%v containerImage=%v containerName=%v\n", streamName, lineOfLog.Kubernetes.ContainerImage, lineOfLog.Kubernetes.ContainerName)
+					chLogLines <- "<b>Parse stream</b> :" + streamName + "<br>"
+					chLogLines <- "<b>Container Image</b> :" + lineOfLog.Kubernetes.ContainerImage + "<br>"
+					chLogLines <- "<b>Container Name</b> :" + lineOfLog.Kubernetes.ContainerName + "<br>"
 					containerNamePrinted = true
 				}
 				timeT := time.Unix(*k.Timestamp/1000, 0)
-				// fmt.Printf("%s: %s\n", timeT, lineOfLog.Log)
-				f.WriteString(fmt.Sprintf("%s: %s<br>\n", timeT, lineOfLog.Log))
+				chLogLines <- fmt.Sprintf("%s: %s<br>\n", timeT, lineOfLog.Log)
 				cptLinePrinted++
 			} else {
-				// Log of this image can be ignored so stop the loop over events
+				a.appLog.Debugln("Log of this image can be ignored so stop the loop over events")
 				break
 			}
 		}
 	}
 	if containerNamePrinted {
-		// fmt.Println("")
-		f.WriteString("<br>\n")
+		chLogLines <- "<br>\n"
 	}
-	a.appLog.Debugln("nextToken             =", nextToken)
-	// a.appLog.Debugln("*res.NextForwardToken =", *res.NextForwardToken)
-	a.appLog.Debugln("*res.NextBackwardToken=", *res.NextBackwardToken)
-
 	if *res.NextBackwardToken != nextToken {
 		time.Sleep(100 * time.Millisecond)
-		return cptLinePrinted + a.getEvents(context, groupName, streamName, client, f, *res.NextBackwardToken)
+		return cptLinePrinted + a.getEvents(context, groupName, streamName, client, chLogLines, *res.NextBackwardToken)
 	}
 	return cptLinePrinted
 }
@@ -202,4 +204,41 @@ func isLineMatchWithOneRule(line string, rules []string) bool {
 	}
 	logrus.Debugf("line %s MATCH NO RULES\n", line)
 	return false
+}
+
+func (a *App) SendReport(freport string) error {
+	body, err := os.ReadFile(freport)
+	if err != nil {
+		return err
+	}
+	if a.cfg.IsMailGunConfigured() {
+		logrus.Debugln("Mail with mailgun")
+		mailgunSvc, err := mailgunservice.NewMailgunService(a.cfg.MailgunConfig.Domain, a.cfg.MailgunConfig.ApiKey)
+		if err != nil {
+			return err
+		}
+		err = mailgunSvc.Send(a.cfg.MailConfig.FromEmail,
+			a.cfg.MailConfig.FromEmail,
+			a.cfg.MailConfig.Subject, string(body),
+			a.cfg.MailConfig.Sendto)
+		if err != nil {
+			return err
+		}
+	}
+	if a.cfg.IsSmtpConfigured() {
+		logrus.Debugln("Mail with smtp")
+		smtpsvc, err := smtpservice.NewSmtpService(a.cfg.SmtpConfig.Login, a.cfg.SmtpConfig.Password,
+			fmt.Sprintf("%s:%d", a.cfg.SmtpConfig.Server, a.cfg.SmtpConfig.Port), a.cfg.SmtpConfig.Tls)
+		if err != nil {
+			return err
+		}
+		err = smtpsvc.Send(a.cfg.MailConfig.FromEmail,
+			a.cfg.MailConfig.FromEmail,
+			a.cfg.MailConfig.Subject, string(body),
+			a.cfg.MailConfig.Sendto)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

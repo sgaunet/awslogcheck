@@ -1,10 +1,10 @@
 # awslogcheck
 
-The purpose is to create a tool to parse cloudwatch logs and get a mail report with all occurences that doesn't match with regexp given (like logcheck but for AWS EKS application, considering that logs are stored in cloudwatch thanks to fluentd).
+The purpose is to create a tool to parse cloudwatch logs and get a mail report with all occurences that doesn't match with regexp given (like logcheck but for AWS EKS applications, considering that logs are stored in cloudwatch thanks to fluentd or fluentbit).
 
 Actually, the program can connect to AWS API through SSO profile or get the default config (need to give permissions to the EC2 that will run the program).
 
-The check is done every hour. If there are logs that do not fit with rules, you will get an email (Need a mailgun account or an SMTP server).
+The check is done every hour. If there are logs that do not fit with rules, you will get one or multiples emails depending on the size of the report.(Need a mailgun account or an SMTP server).
 
 # Configuration
 
@@ -23,6 +23,7 @@ containerNameToIgnore:
   - build
   - svc-0
 logGroup: /aws/containerinsights/dev-EKS/application
+aws_region: eu-west-3
 mailSubject: awslogcheck
 mailTo: 
 mailFrom:
@@ -39,13 +40,7 @@ smtp:
 
 imagesToIgnore and containerNameToIgnore are golang regexp expression, you can test with [https://regex101.com/](https://regex101.com/)
 
-One environment variable need to be declared :
-
-```
-AWS_REGION: eu-west-3
-```
-
-Every environment vars are mandatory. The loggroup should be the loggroup created by fluentd deployment. awslogcheck won't be able to check another structure of events.
+The loggroup should be the loggroup created by fluentd/fluentbit deployment. awslogcheck won't be able to check another structure of events.
 
 ![loggroup](img/log-groups.png)
 
@@ -62,15 +57,12 @@ Login into and specify the profile to use with option -p :
 
 ```
 aws sso login --profile dev
-awslogcheck  -g /aws/containerinsights/dev-EKS/application -t 3600 -c cfg.yml -p dev
+awslogcheck -c cfg.yml -p dev
 ```
 
 ### In command line (EC2)
 
-You probably will have to set AWS_REGION :
-
 ```
-export AWS_REGION=eu-west-3
 awslogcheck  -g /aws/containerinsights/dev-EKS/application -c cfg.yml
 ```
 
@@ -148,6 +140,7 @@ This project is using :
 * docker manifest
 * [goreleaser](https://goreleaser.com/)
 
+**A little comment, there is no tests, the initial development has been done in quick and dirty mode. Maybe, this problem will be adressed in the future but it's a side project with very very low priority so don't expect a lot of features or improvements.**
 
 ## Binary 
 

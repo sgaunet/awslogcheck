@@ -4,13 +4,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/sgaunet/awslogcheck/app"
+	"github.com/sgaunet/awslogcheck/internal/app"
+	"github.com/sgaunet/awslogcheck/internal/configapp"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -36,14 +36,14 @@ func initTrace(debugLevel string) *logrus.Logger {
 	appLog.SetOutput(os.Stdout)
 
 	switch debugLevel {
-	case "info":
-		appLog.SetLevel(logrus.InfoLevel)
+	case "debug":
+		appLog.SetLevel(logrus.DebugLevel)
 	case "warn":
 		appLog.SetLevel(logrus.WarnLevel)
 	case "error":
 		appLog.SetLevel(logrus.ErrorLevel)
 	default:
-		appLog.SetLevel(logrus.DebugLevel)
+		appLog.SetLevel(logrus.InfoLevel)
 	}
 	return appLog
 }
@@ -72,30 +72,27 @@ func printID(cfg aws.Config) {
 }
 
 var version string = "development"
+var application *app.App
+var awsCfg aws.Config // Configuration to connect to AWS API
 
 func printVersion() {
 	fmt.Println(version)
 }
 
 func main() {
-	var cptLinePrinted int
-	var cfg aws.Config // Configuration to connect to AWS API
+	// var cptLinePrinted int
 	var vOption bool
-	var groupName, ssoProfile string
+	var ssoProfile string
 	var err error
 	var configFilename string
-	var configApp app.AppConfig
+	var configApp configapp.AppConfig
 	sigs := make(chan os.Signal, 5)
 
 	// Treat args
 	flag.BoolVar(&vOption, "v", false, "Get version")
-	flag.StringVar(&groupName, "g", "", "LogGroup to parse")
 	flag.StringVar(&ssoProfile, "p", "", "Auth by SSO")
 	flag.StringVar(&configFilename, "c", "", "Directory containing patterns to ignore")
 	flag.Parse()
-
-	appLog := initTrace(os.Getenv("DEBUGLEVEL"))
-	appLog.Infoln("appLog.Level=", appLog.Level)
 
 	if vOption {
 		printVersion()
@@ -103,95 +100,48 @@ func main() {
 	}
 
 	if configFilename != "" {
-		configApp, err = app.ReadYamlCnxFile(configFilename)
+		configApp, err = configapp.ReadYamlCnxFile(configFilename)
 		if err != nil {
 			logrus.Errorf("ERROR: %v\n", err.Error())
 			os.Exit(1)
 		}
+	} else {
+		logrus.Errorln("configuration file is mandatory")
 	}
+	appLog := initTrace(configApp.DebugLevel)
+	appLog.Infoln("appLog.Level=", configApp.DebugLevel)
+	appLog.Debugln("loggroup=", configApp.LogGroup)
+
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
-	app := app.New(ctx, configApp, 3600, appLog) // 3600 is the number of second since now to parse logs
 
 	// No profile selected
 	if len(ssoProfile) == 0 {
-		cfg, err = config.LoadDefaultConfig(context.TODO(), config.WithRegion("eu-west-3"))
+		awsCfg, err = config.LoadDefaultConfig(context.TODO(), config.WithRegion("eu-west-3"))
 		checkErrorAndExitIfErr(err)
 	} else {
 		// Try to connect with the SSO profile put in parameter
-		cfg, err = config.LoadDefaultConfig(
+		awsCfg, err = config.LoadDefaultConfig(
 			context.TODO(),
 			config.WithSharedConfigProfile(ssoProfile),
 		)
 		checkErrorAndExitIfErr(err)
 	}
-	printID(cfg)
+	printID(awsCfg)
+	application = app.New(ctx, configApp, awsCfg, 3600, appLog) // 3600 is the number of second since now to parse logs
 
-	err = app.LoadRules()
+	err = application.LoadRules()
 	if err != nil {
-		logrus.Errorln(err)
-		logrus.Errorln("Cannot load rules...")
+		appLog.Errorln(err)
+		appLog.Errorln("Cannot load rules...")
 		os.Exit(1)
 	}
 
-	if groupName == "" {
-		// groupname not specified in command line, try to get it with env var
-		groupName = os.Getenv("LOGGROUP")
-		if groupName == "" {
-			logrus.Errorln("No LOGGROUP specified. Set LOGGROUP env var or use the option -g")
-			os.Exit(1)
-		}
-	}
+	// mainRoutine() // TO DELETE
 
 	c := cron.New()
 	// second minute hour day month
-	c.AddFunc("0 0 * * *", func() {
-		freport := "/tmp/report.html"
-		time.Sleep(time.Duration(ingestionTimeS) * time.Second) // Wait the time for the ingestion time of logs
-
-		// if debug mode, launch goroutine to print memory stats
-		// if os.Getenv("DEBUGLEVEL") == "debug" {
-		// 	stop = make(chan interface{})
-		// 	go app.PrintMemoryStats(stop)
-		// }
-
-		logrus.Debugln("Start Logcheck")
-		cptLinePrinted, err = app.LogCheck(cfg, groupName, freport)
-		if err != nil {
-			logrus.Errorln(err.Error())
-			os.Exit(1)
-		}
-		logrus.Debugln("End Logcheck")
-		logrus.Debugln("cptLinePrinted=", cptLinePrinted)
-
-		if cptLinePrinted == 0 {
-			logrus.Infof("Every logs have been filtered (%s)\n", groupName)
-		} else {
-			body, err := ioutil.ReadFile(freport)
-			if err != nil {
-				logrus.Errorln(err.Error())
-			}
-			if isMailGunConfigured(os.Getenv("MAILGUN_DOMAIN"), os.Getenv("MAILGUN_APIKEY")) {
-				logrus.Debugln("Mail with mailgun")
-				err = sendMailWithMailgun(os.Getenv("MAILGUN_DOMAIN"), os.Getenv("MAILGUN_APIKEY"), os.Getenv("FROM_EMAIL"), os.Getenv("SUBJECT"), string(body), os.Getenv("MAILTO"))
-				if err != nil {
-					logrus.Errorln(err.Error())
-				}
-			}
-			if isSmtpConfigured(os.Getenv("SMTP_LOGIN"), os.Getenv("SMTP_PASSWORD"), os.Getenv("SMTP_SERVER")+":"+os.Getenv("SMTP_PORT")) {
-				logrus.Debugln("Mail with smtp")
-				err = sendSmtpMail(os.Getenv("FROM_EMAIL"), os.Getenv("MAILTO"), os.Getenv("SUBJECT"), string(body), os.Getenv("SMTP_LOGIN"), os.Getenv("SMTP_PASSWORD"), os.Getenv("SMTP_SERVER")+":"+os.Getenv("SMTP_PORT"), true)
-				if err != nil {
-					logrus.Errorln(err.Error())
-				}
-			}
-		}
-		logrus.Debugln("Remove report")
-		err = os.Remove(freport)
-		if err != nil {
-			logrus.Errorln(err.Error())
-		}
-	})
+	c.AddFunc("0 0 * * *", mainRoutine)
 	c.Start()
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	<-sigs
@@ -201,5 +151,20 @@ func main() {
 	// buf := make([]byte, 1<<16)
 	// runtime.Stack(buf, true)
 	// fmt.Printf("%s", buf)
+}
 
+func mainRoutine() {
+	time.Sleep(time.Duration(ingestionTimeS) * time.Second) // Wait the time for the ingestion time of logs
+	// if debug mode, launch goroutine to print memory stats
+	// if os.Getenv("DEBUGLEVEL") == "debug" {
+	// 	stop = make(chan interface{})
+	// 	go app.PrintMemoryStats(stop)
+	// }
+	logrus.Debugln("Start Logcheck")
+	err := application.LogCheck()
+	if err != nil {
+		logrus.Errorln(err.Error())
+		os.Exit(1)
+	}
+	logrus.Debugln("End Logcheck")
 }
