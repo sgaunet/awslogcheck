@@ -1,4 +1,3 @@
 dist
-src3
-awslogcheck
+/awslogcheck
 .task
