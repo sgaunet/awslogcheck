@@ -7,7 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.18.27
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.22.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.19.2
-	github.com/mailgun/mailgun-go/v4 v4.9.2
+	github.com/mailgun/mailgun-go/v4 v4.11.1
 	github.com/robfig/cron v1.2.0
 	github.com/sgaunet/calcdate/calcdate v0.0.0-20220108124356-12ceff09b8d0
 	github.com/sgaunet/ratelimit v1.1.1
