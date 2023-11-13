@@ -6,21 +6,19 @@ vars:
 
 tasks:
   default:
+    desc: "List tasks"
+    cmds:
+      - task -a
+
+  bin:
+    desc: "Build binary"
     cmds:
       - go mod tidy
       - CGO_ENABLED=0 go build .
       - upx ./{{.BINFILE}}
-    # silent: true
-    # sources:
-    #   - smtp-tls.go
-    #   - main.go
-    #   - go*
-    #   - app/*.go
-    # method: checksum
-    # generates:
-    #   - "{{.BINFILE}}"
 
   image:
+    desc: "Build docker image"
     deps: 
     - default
     sources:
@@ -32,9 +30,11 @@ tasks:
       - docker push {{.IMG}}
 
   snapshot:
+    desc: "Create a snapshot release"
     cmds:
       - GITLAB_TOKEN="" goreleaser --clean --snapshot
     
   release:
+    desc: "Create a release"
     cmds:
       - GITLAB_TOKEN="" goreleaser --clean
