@@ -142,7 +142,7 @@ This project is using :
 
 **A little comment, there is no tests, the initial development has been done in quick and dirty mode. Maybe, this problem will be adressed in the future but it's a side project with very very low priority so don't expect a lot of features or improvements.**
 
-## Binary 
+## Binary
 
 ```
 task
