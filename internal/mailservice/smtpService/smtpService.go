@@ -54,7 +54,7 @@ func (s *smtpService) Send(from string, sender string, subject string, body stri
 	}
 	to := mail.Address{
 		Name:    "",
-		Address: sender,
+		Address: recipient,
 	}
 
 	headers := make(map[string]string)
