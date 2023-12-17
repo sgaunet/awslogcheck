@@ -1,3 +1,6 @@
+[![Go Report Card](https://goreportcard.com/badge/github.com/sgaunet/awslogcheck)](https://goreportcard.com/report/github.com/sgaunet/awslogcheck)
+
+
 # awslogcheck
 
 The purpose is to create a tool to parse cloudwatch logs and get a mail report with all occurences that doesn't match with regexp given (like logcheck but for AWS EKS applications, considering that logs are stored in cloudwatch thanks to fluentd or fluentbit).
