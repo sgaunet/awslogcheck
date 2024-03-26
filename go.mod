@@ -3,7 +3,7 @@ module github.com/sgaunet/awslogcheck
 go 1.19
 
 require (
-	github.com/aws/aws-sdk-go-v2 v1.25.3
+	github.com/aws/aws-sdk-go-v2 v1.26.0
 	github.com/aws/aws-sdk-go-v2/config v1.27.7
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.34.3
 	github.com/aws/aws-sdk-go-v2/service/sts v1.28.4
