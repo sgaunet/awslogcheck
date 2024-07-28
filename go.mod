@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/aws/aws-sdk-go-v2 v1.30.3
 	github.com/aws/aws-sdk-go-v2/config v1.27.27
-	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.37.1
+	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.37.3
 	github.com/aws/aws-sdk-go-v2/service/sts v1.30.3
 	github.com/mailgun/mailgun-go/v4 v4.12.0
 	github.com/robfig/cron v1.2.0
