@@ -13,7 +13,7 @@ Actually, the program can connect to AWS API through SSO profile or get the defa
 
 The check is done every hour. If there are logs that do not fit with rules, you will get one or multiples emails depending on the size of the report.(Need a mailgun account or an SMTP server).
 
-# Configuration
+## Configuration
 
 The configuration files has the below format :
 
@@ -75,7 +75,7 @@ awslogcheck  -g /aws/containerinsights/dev-EKS/application -c cfg.yml
 
 Set the role below to get permissions from your EC2 to browse logs.
 
-## Role for EC2
+### Role for EC2
 
 The program need permissions to consult cloudwatch. 
 
@@ -114,7 +114,7 @@ Policy:
   UpdateDate: '.................'
 ```
 
-# Deployment in kubernetes
+## Deployment in kubernetes
 
 You have manifests example in the deploy folder.
 
@@ -124,7 +124,7 @@ This tool uses the aws sdk golang v2. [Here is the doc.](https://pkg.go.dev/gith
 
 [Most of API calls use cloudwatchlogs.](https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs)
 
-# FAQ
+## FAQ
 
 If you have error like (when using the SSO) :
 
@@ -136,7 +136,7 @@ exit status 1
 [Update awscli](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)
 
 
-# Build
+## Build
 
 This project is using :
 
@@ -149,20 +149,59 @@ This project is using :
 
 **A little comment, there is no tests, the initial development has been done in quick and dirty mode. Maybe, this problem will be adressed in the future but it's a side project with very very low priority so don't expect a lot of features or improvements.**
 
-## Binary
+### Binary
 
 ```
 task
 ```
 
-## Build the image
+### Build the image
 
 ```
 task image
 ```
 
-# Make a release
+### Make a release
 
 ```
 task release
 ```
+
+## Project Status
+
+🟨 **Maintenance Mode**: This project is in maintenance mode.
+
+While we are committed to keeping the project's dependencies up-to-date and secure, please note the following:
+
+- New features are unlikely to be added
+- Bug fixes will be addressed, but not necessarily promptly
+- Security updates will be prioritized
+
+## Issues and Bug Reports
+
+We still encourage you to use our issue tracker for:
+
+- 🐛 Reporting critical bugs
+- 🔒 Reporting security vulnerabilities
+- 🔍 Asking questions about the project
+
+Please check existing issues before creating a new one to avoid duplicates.
+
+## Contributions
+
+🤝 Limited contributions are still welcome.
+
+While we're not actively developing new features, we appreciate contributions that:
+
+- Fix bugs
+- Update dependencies
+- Improve documentation
+- Enhance performance or security
+
+If you're interested in contributing, please read our [CONTRIBUTING.md](link-to-contributing-file) guide for more information on how to get started.
+
+## Support
+
+As this project is in maintenance mode, support may be limited. We appreciate your understanding and patience.
+
+Thank you for your interest in our project!
