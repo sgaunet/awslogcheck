@@ -154,10 +154,10 @@ func (a *App) isImageIgnored(imageToCheck string) bool {
 	for _, imgToIgnore := range a.cfg.ImagesToIgnore {
 		r := regexp.MustCompile(imgToIgnore)
 		if r.MatchString(imageToCheck) {
-			// fmt.Printf("%s compared to %s : MATCH\n", imageToCheck, imgToIgnore)
+			a.appLog.Debugf("%s compared to %s : MATCH\n", imageToCheck, imgToIgnore)
 			return true
-			// } else {
-			// 	fmt.Printf("%s compared to %s : DO NOT MATCH\n", imageToCheck, imgToIgnore)
+		} else {
+			a.appLog.Debugf("%s compared to %s : DO NOT MATCH\n", imageToCheck, imgToIgnore)
 		}
 	}
 	return false
@@ -168,9 +168,11 @@ func (a *App) isContainerIgnored(containerToCheck string) bool {
 		r := regexp.MustCompile(containerToIgnore)
 		if r.MatchString(containerToCheck) {
 			// fmt.Printf("%s compared to %s : MATCH\n", containerToCheck, containerToIgnore)
+			a.appLog.Debugf("%s compared to %s : MATCH\n", containerToCheck, containerToIgnore)
 			return true
-			// } else {
+		} else {
 			// 	fmt.Printf("%s compared to %s : DO NOT MATCH\n", containerToCheck, containerToIgnore)
+			a.appLog.Debugf("%s compared to %s : DO NOT MATCH\n", containerToCheck, containerToIgnore)
 		}
 	}
 	return false
