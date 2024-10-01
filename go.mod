@@ -7,7 +7,7 @@ toolchain go1.23.0
 require (
 	github.com/aws/aws-sdk-go-v2 v1.31.0
 	github.com/aws/aws-sdk-go-v2/config v1.27.39
-	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.40.1
+	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.40.3
 	github.com/aws/aws-sdk-go-v2/service/sts v1.31.3
 	github.com/mailgun/mailgun-go/v4 v4.16.0
 	github.com/robfig/cron v1.2.0
