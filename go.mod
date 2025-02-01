@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.28.10
 	github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.45.3
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.6
-	github.com/mailgun/mailgun-go/v4 v4.21.0
+	github.com/mailgun/mailgun-go/v4 v4.22.0
 	github.com/robfig/cron v1.2.0
 	github.com/sgaunet/calcdate/calcdate v0.0.0-20220108124356-12ceff09b8d0
 	github.com/sgaunet/ratelimit v1.1.1
@@ -29,7 +29,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.24.9 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.28.8 // indirect
 	github.com/aws/smithy-go v1.22.1 // indirect
-	github.com/go-chi/chi/v5 v5.1.0 // indirect
+	github.com/go-chi/chi/v5 v5.2.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/mailgun/errors v0.4.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
