@@ -23,7 +23,10 @@ jobs:
       - name: Install devbox
         shell: /usr/bin/bash {0}
         run: |
-          curl -fsSL https://get.jetify.com/devbox | bash
+          curl -fsSL https://get.jetify.com/devbox > /tmp/devbox
+          chmod +x /tmp/devbox
+          bash /tmp/devbox -f
+          devbox install
 
       -
         # Add support for more platforms with QEMU (optional)
