@@ -3,8 +3,7 @@
   "packages": [
     "goreleaser@2.6.1",
     "go@1.24.0",
-    "go-task@3.41.0",
-    "github:NixOS/nixpkgs/nixpkgs-unstable"
+    "go-task@3.41.0"
   ],
   "shell": {
     "init_hook": [

@@ -21,7 +21,9 @@ jobs:
           fetch-depth: 0
 
       - name: Install devbox
-        uses: jetify-com/devbox-install-action@v0.12.0
+        shell: /usr/bin/bash {0}
+        run: |
+          curl -fsSL https://get.jetify.com/devbox | bash
 
       -
         # Add support for more platforms with QEMU (optional)
@@ -43,10 +45,7 @@ jobs:
         shell: /usr/bin/bash {0}
         run: |
           devbox install
-          devbox run release || true
-          git diff devbox.lock
-          echo "**********"
-          cat devbox.lock
+          devbox run release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Your GoReleaser Pro key, if you are using the 'goreleaser-pro' distribution
