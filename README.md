@@ -3,7 +3,7 @@
 ![GitHub Downloads](https://img.shields.io/github/downloads/sgaunet/awslogcheck/total)
 [![Maintainability](https://api.codeclimate.com/v1/badges/1560d5e89a70c4f0bfa9/maintainability)](https://codeclimate.com/github/sgaunet/awslogcheck/maintainability)
 [![GoDoc](https://godoc.org/github.com/sgaunet/awslogcheck?status.svg)](https://godoc.org/github.com/sgaunet/awslogcheck)
-[![License](https://img.shields.io/github/license/sgaunet/awslogcheck.svg)]
+[![License](https://img.shields.io/github/license/sgaunet/awslogcheck.svg)](LICENSE)
 
 # awslogcheck
 
