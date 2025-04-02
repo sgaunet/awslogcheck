@@ -37,4 +37,6 @@ tasks:
   release:
     desc: "Create a release"
     cmds:
-      - GITLAB_TOKEN="" goreleaser --clean
+      - GITLAB_TOKEN="" goreleaser --clean --skip=validate 
+      # remove the --skip=validate flag to validate the release before creating it
+      # see https://github.com/jetify-com/devbox-install-action/issues/76
