@@ -1,7 +1,6 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/sgaunet/awslogcheck)](https://goreportcard.com/report/github.com/sgaunet/awslogcheck)
 [![GitHub release](https://img.shields.io/github/release/sgaunet/awslogcheck.svg)](https://github.com/sgaunet/awslogcheck/releases/latest)
 ![GitHub Downloads](https://img.shields.io/github/downloads/sgaunet/awslogcheck/total)
-[![Maintainability](https://api.codeclimate.com/v1/badges/1560d5e89a70c4f0bfa9/maintainability)](https://codeclimate.com/github/sgaunet/awslogcheck/maintainability)
 [![GoDoc](https://godoc.org/github.com/sgaunet/awslogcheck?status.svg)](https://godoc.org/github.com/sgaunet/awslogcheck)
 [![License](https://img.shields.io/github/license/sgaunet/awslogcheck.svg)](LICENSE)
 
