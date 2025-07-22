@@ -1,6 +1,8 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/sgaunet/awslogcheck)](https://goreportcard.com/report/github.com/sgaunet/awslogcheck)
 [![GitHub release](https://img.shields.io/github/release/sgaunet/awslogcheck.svg)](https://github.com/sgaunet/awslogcheck/releases/latest)
 ![GitHub Downloads](https://img.shields.io/github/downloads/sgaunet/awslogcheck/total)
+[![Release](https://github.com/sgaunet/awslogcheck/actions/workflows/release.yml/badge.svg)](https://github.com/sgaunet/awslogcheck/actions/workflows/release.yml)
+[![Snapshot](https://github.com/sgaunet/awslogcheck/actions/workflows/snapshot.yml/badge.svg)](https://github.com/sgaunet/awslogcheck/actions/workflows/snapshot.yml)
 [![GoDoc](https://godoc.org/github.com/sgaunet/awslogcheck?status.svg)](https://godoc.org/github.com/sgaunet/awslogcheck)
 [![License](https://img.shields.io/github/license/sgaunet/awslogcheck.svg)](LICENSE)
 
