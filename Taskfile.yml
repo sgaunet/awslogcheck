@@ -2,7 +2,7 @@
 version: '3'
 vars:
   BINFILE: awslogcheck
-  IMG: sgaunet/awslogcheck:latest
+  IMG: ghcr.io/sgaunet/awslogcheck:latest
 
 tasks:
   default:
@@ -10,7 +10,7 @@ tasks:
     cmds:
       - task -a
 
-  bin:
+  build:
     desc: "Build binary"
     cmds:
       - go mod tidy
@@ -20,14 +20,14 @@ tasks:
   image:
     desc: "Build docker image"
     deps: 
-    - default
-    sources:
-      - ./{{.BINFILE}}
-      - Dockerfile
-      - resources
+    - snapshot
     cmds:
-      - docker build . -t {{.IMG}}
-      - docker push {{.IMG}}
+      - docker push ghcr.io/sgaunet/awslogcheck:latest-amd64
+      - docker push ghcr.io/sgaunet/awslogcheck:latest-arm64v8
+      - docker push ghcr.io/sgaunet/awslogcheck:latest-armv6
+      - docker push ghcr.io/sgaunet/awslogcheck:latest-armv7
+      - docker manifest create --amend ghcr.io/sgaunet/awslogcheck:latest ghcr.io/sgaunet/awslogcheck:latest-amd64 ghcr.io/sgaunet/awslogcheck:latest-arm64v8 ghcr.io/sgaunet/awslogcheck:latest-armv6 ghcr.io/sgaunet/awslogcheck:latest-armv7
+      - docker manifest push ghcr.io/sgaunet/awslogcheck:latest
 
   snapshot:
     desc: "Create a snapshot release"
