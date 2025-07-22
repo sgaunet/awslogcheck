@@ -1,4 +1,4 @@
-FROM busybox:1.37.0 as build-env
+FROM busybox:1.37.0 AS build-env
 
 FROM scratch AS final
 LABEL maintainer="Sylvain Gaunet <sgaunet@gmail.com>"
