@@ -11,7 +11,7 @@ import (
 )
 
 // Main function that parses every streams of loggroup a.cfg.LogGroup
-func (a *App) LogCheck() error {
+func (a *App) LogCheck(ctx context.Context) error {
 	var wg sync.WaitGroup
 	chLogLines := make(chan string, 1000)
 	clientCloudwatchlogs := cloudwatchlogs.NewFromConfig(a.awscfg)
@@ -29,12 +29,13 @@ func (a *App) LogCheck() error {
 	a.appLog.Debugln("minTimeStampsInMs=", minTimeStampInMs)
 	a.appLog.Debugln("maxTimeStampsInMs=", maxTimeStampInMs)
 
-	ctx := context.Background()
 	wg.Add(1)
 	go a.collectLinesOfReportAndSendReport(ctx, &wg, chLogLines)
-	a.parseAllStreamsOfGroup(clientCloudwatchlogs, a.cfg.LogGroup, "", minTimeStampInMs, maxTimeStampInMs, chLogLines)
+	
+	// Use the new FilterLogEvents API for better performance
+	_, err = a.parseAllEventsWithFilter(ctx, clientCloudwatchlogs, a.cfg.LogGroup, minTimeStampInMs, maxTimeStampInMs, chLogLines)
 	close(chLogLines)
-	ctx.Done()
+	
 	wg.Wait()
 	return err
 }
