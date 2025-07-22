@@ -1,6 +1,8 @@
 module github.com/sgaunet/awslogcheck
 
-go 1.23
+go 1.23.0
+
+toolchain go1.24.5
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.36.5
@@ -10,8 +12,8 @@ require (
 	github.com/mailgun/mailgun-go/v4 v4.23.0
 	github.com/robfig/cron v1.2.0
 	github.com/sgaunet/calcdate/calcdate v0.0.0-20220108124356-12ceff09b8d0
-	github.com/sgaunet/ratelimit v1.1.1
 	github.com/sirupsen/logrus v1.9.3
+	golang.org/x/time v0.11.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 

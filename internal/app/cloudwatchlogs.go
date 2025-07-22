@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -15,7 +16,10 @@ func (a *App) findLogGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupNam
 	if len(NextToken) != 0 {
 		params.NextToken = &NextToken
 	}
-	a.rateLimit.WaitIfLimitReached()
+	if err := a.logGroupRateLimit.Wait(context.TODO()); err != nil {
+		a.appLog.Errorln("Rate limit error:", err.Error())
+		return false
+	}
 	res, err := clientCloudwatchlogs.DescribeLogGroups(context.TODO(), &params)
 	if err != nil {
 		a.appLog.Errorln(err.Error())
@@ -34,55 +38,106 @@ func (a *App) findLogGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupNam
 	return a.findLogGroup(clientCloudwatchlogs, groupName, *res.NextToken)
 }
 
-// Parse every events of every streams of a group
-// Recursive function
-func (a *App) parseAllStreamsOfGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupName string, nextToken string, minTimeStamp int64, maxTimeStamp int64, chLogLines chan<- string) (int, error) {
+// parseAllEventsWithFilter uses FilterLogEvents API for improved performance
+func (a *App) parseAllEventsWithFilter(ctx context.Context, clientCloudwatchlogs *cloudwatchlogs.Client, groupName string, minTimeStamp int64, maxTimeStamp int64, chLogLines chan<- string) (int, error) {
 	var cptLinePrinted int
-	var paramsLogStream cloudwatchlogs.DescribeLogStreamsInput
-	var stopToParseLogStream bool
 
-	// Search logstreams of groupName
-	// Ordered by last event time
-	// descending
-	paramsLogStream.LogGroupName = &groupName
-	paramsLogStream.OrderBy = "LastEventTime"
-	descending := true
-	paramsLogStream.Descending = &descending
-
-	if len(nextToken) != 0 {
-		paramsLogStream.NextToken = &nextToken
+	// Set up FilterLogEvents input parameters
+	input := &cloudwatchlogs.FilterLogEventsInput{
+		LogGroupName: &groupName,
+		StartTime:    &minTimeStamp,
+		EndTime:      &maxTimeStamp,
+		Interleaved:  &[]bool{true}[0], // Sort events from multiple streams by timestamp
 	}
 
-	// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs#Client.DescribeLogStreams
-	a.rateLimit.WaitIfLimitReached()
-	res2, err := clientCloudwatchlogs.DescribeLogStreams(context.TODO(), &paramsLogStream)
-	if err != nil {
-		return cptLinePrinted, err
-	}
+	a.appLog.Debugf("Starting FilterLogEvents for group %s with time range %d-%d", groupName, minTimeStamp, maxTimeStamp)
 
-	// Loop over streams
-	for _, j := range res2.LogStreams {
-		a.appLog.Debugln("Stream Name: ", *j.LogStreamName)
-		a.appLog.Debugln("LasteventTimeStamp: ", *j.LastEventTimestamp)
-		tm := time.Unix(*j.LastEventTimestamp/1000, 0) // aws timestamp are in ms
-		a.appLog.Debugf("Parse stream : %s (Last event %v)\n", *j.LogStreamName, tm)
+	// Create paginator for handling large result sets
+	paginator := cloudwatchlogs.NewFilterLogEventsPaginator(clientCloudwatchlogs, input)
 
-		// No need to parse old logstream older than minTimeStamp
-		if *j.LastEventTimestamp < minTimeStamp {
-			stopToParseLogStream = true
-			a.appLog.Debugf("%v < %v\n", *j.LastEventTimestamp, minTimeStamp)
-			break
+	eventCount := 0
+	pageCount := 0
+	
+	// Keep track of containers we've already printed headers for
+	containersPrinted := make(map[string]bool)
+
+	// Process all pages of results
+	for paginator.HasMorePages() {
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return cptLinePrinted, ctx.Err()
+		default:
 		}
-		c := a.getEvents(context.TODO(), groupName, *j.LogStreamName, clientCloudwatchlogs, chLogLines, "")
-		cptLinePrinted += c
-	}
 
-	if res2.NextToken != nil && !stopToParseLogStream {
-		cpt, err := a.parseAllStreamsOfGroup(clientCloudwatchlogs, groupName, *res2.NextToken, minTimeStamp, maxTimeStamp, chLogLines)
-		cptLinePrinted += cpt
+		// Rate limit the API call
+		if err := a.eventsRateLimit.Wait(ctx); err != nil {
+			return cptLinePrinted, fmt.Errorf("rate limit wait error: %w", err)
+		}
+
+		// Get next page of events
+		output, err := paginator.NextPage(ctx)
 		if err != nil {
-			return cpt, err
+			return cptLinePrinted, fmt.Errorf("failed to filter log events: %w", err)
+		}
+
+		pageCount++
+		a.appLog.Debugf("Processing page %d with %d events", pageCount, len(output.Events))
+
+		// Process events in this page
+		for _, event := range output.Events {
+			eventCount++
+			
+			var lineOfLog fluentDockerLog
+			err := json.Unmarshal([]byte(*event.Message), &lineOfLog)
+			if err != nil {
+				a.appLog.Errorln("Failed to parse log event:", err.Error())
+				continue
+			}
+
+			// Check if this line matches any rules
+			if !isLineMatchWithOneRule(lineOfLog.Log, a.rules) {
+				// Check if this container/image should be ignored
+				imageIgnored := a.isImageIgnored(lineOfLog.Kubernetes.ContainerImage)
+				containerIgnored := a.isContainerIgnored(lineOfLog.Kubernetes.ContainerName)
+
+				if !imageIgnored && !containerIgnored {
+					// Create a unique key for this container
+					containerKey := fmt.Sprintf("%s|%s|%s", 
+						lineOfLog.Kubernetes.ContainerImage,
+						lineOfLog.Kubernetes.ContainerName,
+						*event.LogStreamName)
+
+					// Print container info if we haven't already
+					if !containersPrinted[containerKey] {
+						a.appLog.Debugf("Parse stream=%v containerImage=%v containerName=%v\n", 
+							*event.LogStreamName, lineOfLog.Kubernetes.ContainerImage, lineOfLog.Kubernetes.ContainerName)
+						chLogLines <- "<b>Parse stream</b> :" + *event.LogStreamName + "<br>"
+						chLogLines <- "<b>Container Image</b> :" + lineOfLog.Kubernetes.ContainerImage + "<br>"
+						chLogLines <- "<b>Container Name</b> :" + lineOfLog.Kubernetes.ContainerName + "<br>"
+						containersPrinted[containerKey] = true
+					}
+
+					// Print the log line
+					timeT := time.Unix(*event.Timestamp/1000, 0).UTC()
+					chLogLines <- fmt.Sprintf("%s UTC: %s<br>\n", timeT.Format("2006-01-02 15:04:05"), lineOfLog.Log)
+					cptLinePrinted++
+				}
+			}
+		}
+
+		// Update progress periodically
+		if eventCount%1000 == 0 {
+			a.appLog.Debugf("Processed %d events so far...", eventCount)
 		}
 	}
-	return cptLinePrinted, err
+
+	// Add line breaks between different containers
+	for range containersPrinted {
+		chLogLines <- "<br>\n"
+	}
+
+	a.appLog.Debugf("Completed FilterLogEvents processing: %d total events, %d lines printed, from %d pages", 
+		eventCount, cptLinePrinted, pageCount)
+	return cptLinePrinted, nil
 }

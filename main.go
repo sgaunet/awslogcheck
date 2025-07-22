@@ -74,6 +74,7 @@ func printID(cfg aws.Config) {
 var version string = "development"
 var application *app.App
 var awsCfg aws.Config // Configuration to connect to AWS API
+var appCtx context.Context
 
 func printVersion() {
 	fmt.Println(version)
@@ -112,8 +113,8 @@ func main() {
 	appLog.Infoln("appLog.Level=", configApp.DebugLevel)
 	appLog.Debugln("loggroup=", configApp.LogGroup)
 
-	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
+	appCtx = context.Background()
+	appCtx, cancel := context.WithCancel(appCtx)
 
 	// No profile selected
 	if len(ssoProfile) == 0 {
@@ -128,7 +129,7 @@ func main() {
 		checkErrorAndExitIfErr(err)
 	}
 	printID(awsCfg)
-	application = app.New(ctx, configApp, awsCfg, 3600, appLog) // 3600 is the number of second since now to parse logs
+	application = app.New(appCtx, configApp, awsCfg, 3600, appLog) // 3600 is the number of second since now to parse logs
 
 	err = application.LoadRules()
 	if err != nil {
@@ -161,7 +162,7 @@ func mainRoutine() {
 	// 	go app.PrintMemoryStats(stop)
 	// }
 	logrus.Debugln("Start Logcheck")
-	err := application.LogCheck()
+	err := application.LogCheck(appCtx)
 	if err != nil {
 		logrus.Errorln(err.Error())
 		os.Exit(1)

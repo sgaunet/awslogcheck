@@ -17,8 +17,8 @@ import (
 	"github.com/sgaunet/awslogcheck/internal/configapp"
 	mailgunservice "github.com/sgaunet/awslogcheck/internal/mailservice/mailgunService"
 	smtpservice "github.com/sgaunet/awslogcheck/internal/mailservice/smtpService"
-	"github.com/sgaunet/ratelimit"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/time/rate"
 )
 
 type App struct {
@@ -27,19 +27,23 @@ type App struct {
 	rules             []string
 	lastPeriodToWatch int
 	appLog            *logrus.Logger
-	rateLimit         *ratelimit.RateLimit
+	eventsRateLimit   *rate.Limiter
+	logGroupRateLimit *rate.Limiter
 }
 
-const awsCloudWatchRateLimit = 20
+// AWS CloudWatch Logs API rate limits
+// https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/cloudwatch_limits_cwl.html
+const maxEventsAPICallPerSecond = 25    // FilterLogEvents, GetLogEvents calls per second
+const maxLogGroupAPICallPerSecond = 10   // DescribeLogGroups calls per second
 
 func New(ctx context.Context, cfg configapp.AppConfig, awscfg aws.Config, lastPeriodToWatch int, log *logrus.Logger) *App {
-	r, _ := ratelimit.New(ctx, 1*time.Second, awsCloudWatchRateLimit)
 	app := App{
 		cfg:               cfg,
 		awscfg:            awscfg,
 		lastPeriodToWatch: lastPeriodToWatch,
 		appLog:            log,
-		rateLimit:         r,
+		eventsRateLimit:   rate.NewLimiter(rate.Limit(maxEventsAPICallPerSecond), maxEventsAPICallPerSecond),
+		logGroupRateLimit: rate.NewLimiter(rate.Limit(maxLogGroupAPICallPerSecond), maxLogGroupAPICallPerSecond),
 	}
 	return &app
 }
@@ -96,7 +100,10 @@ func (a *App) getEvents(context context.Context, groupName string, streamName st
 		a.appLog.Debugln("getEvents", groupName, streamName, nextToken)
 	}
 
-	a.rateLimit.WaitIfLimitReached()
+	if err := a.eventsRateLimit.Wait(context); err != nil {
+		a.appLog.Errorln("Rate limit error:", err.Error())
+		return cptLinePrinted
+	}
 	res, err := client.GetLogEvents(context, &input)
 	if err != nil {
 		a.appLog.Errorln("Error", err.Error())
@@ -131,8 +138,8 @@ func (a *App) getEvents(context context.Context, groupName string, streamName st
 					chLogLines <- "<b>Container Name</b> :" + lineOfLog.Kubernetes.ContainerName + "<br>"
 					containerNamePrinted = true
 				}
-				timeT := time.Unix(*k.Timestamp/1000, 0)
-				chLogLines <- fmt.Sprintf("%s: %s<br>\n", timeT, lineOfLog.Log)
+				timeT := time.Unix(*k.Timestamp/1000, 0).UTC()
+				chLogLines <- fmt.Sprintf("%s UTC: %s<br>\n", timeT.Format("2006-01-02 15:04:05"), lineOfLog.Log)
 				cptLinePrinted++
 			} else {
 				a.appLog.Debugln("Log of this image can be ignored so stop the loop over events")
