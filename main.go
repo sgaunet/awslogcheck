@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,64 +12,39 @@ import (
 
 	"github.com/sgaunet/awslogcheck/internal/app"
 	"github.com/sgaunet/awslogcheck/internal/configapp"
+	"github.com/sgaunet/awslogcheck/internal/logger"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/robfig/cron"
-	"github.com/sirupsen/logrus"
 )
 
 const ingestionTimeS int = 120
 
-func initTrace(debugLevel string) *logrus.Logger {
-	appLog := logrus.New()
-	// Log as JSON instead of the default ASCII formatter.
-	//log.SetFormatter(&log.JSONFormatter{})
-	appLog.SetFormatter(&logrus.TextFormatter{
-		DisableColors:    false,
-		FullTimestamp:    false,
-		DisableTimestamp: true,
-	})
-
-	// Output to stdout instead of the default stderr
-	// Can be any io.Writer, see below for File example
-	appLog.SetOutput(os.Stdout)
-
-	switch debugLevel {
-	case "debug":
-		appLog.SetLevel(logrus.DebugLevel)
-	case "warn":
-		appLog.SetLevel(logrus.WarnLevel)
-	case "error":
-		appLog.SetLevel(logrus.ErrorLevel)
-	default:
-		appLog.SetLevel(logrus.InfoLevel)
-	}
+func initTrace(debugLevel string) *slog.Logger {
+	appLog := logger.NewLogger(debugLevel)
 	return appLog
 }
 
-func checkErrorAndExitIfErr(err error) {
+func checkErrorAndExitIfErr(err error, logger *slog.Logger) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ERROR-: %s\n", err.Error())
+		logger.Error("error occured", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 }
 
 // print AWS identity
-func printID(cfg aws.Config) {
+func printID(cfg aws.Config, logger *slog.Logger) {
 	client := sts.NewFromConfig(cfg)
 	identity, err := client.GetCallerIdentity(
 		context.TODO(),
 		&sts.GetCallerIdentityInput{},
 	)
-	checkErrorAndExitIfErr(err)
-	fmt.Printf(
-		"Account: %s\nUserID: %s\nARN: %s\n\n",
-		aws.ToString(identity.Account),
-		aws.ToString(identity.UserId),
-		aws.ToString(identity.Arn),
-	)
+	checkErrorAndExitIfErr(err, logger)
+	logger.Info("", slog.String("account", aws.ToString(identity.Account)))
+	logger.Info("", slog.String("userID", aws.ToString(identity.UserId)))
+	logger.Info("", slog.String("arn", aws.ToString(identity.Arn)))
 }
 
 var version string = "development"
@@ -88,6 +64,7 @@ func main() {
 	var configFilename string
 	var configApp configapp.AppConfig
 	sigs := make(chan os.Signal, 5)
+	appLog := initTrace("")
 
 	// Treat args
 	flag.BoolVar(&vOption, "v", false, "Get version")
@@ -100,18 +77,23 @@ func main() {
 		os.Exit(0)
 	}
 
+	if configFilename == "" {
+		fmt.Fprintf(os.Stderr, "ERROR: configuration file is mandatory\n")
+		os.Exit(1)
+	}
 	if configFilename != "" {
 		configApp, err = configapp.ReadYamlCnxFile(configFilename)
 		if err != nil {
-			logrus.Errorf("ERROR: %v\n", err.Error())
+			fmt.Fprintf(os.Stderr, "ERROR: %v\n", err.Error())
+			appLog.Error("Cannot read configuration file", slog.String("filename", configFilename))
+			appLog.Error("Please check the file and try again")
 			os.Exit(1)
 		}
-	} else {
-		logrus.Errorln("configuration file is mandatory")
 	}
-	appLog := initTrace(configApp.DebugLevel)
-	appLog.Infoln("appLog.Level=", configApp.DebugLevel)
-	appLog.Debugln("loggroup=", configApp.LogGroup)
+
+	appLog = initTrace(configApp.DebugLevel)
+	appLog.Info("Log level set", slog.String("level", configApp.DebugLevel))
+	appLog.Debug("Log group configured", slog.String("loggroup", configApp.LogGroup))
 
 	appCtx = context.Background()
 	appCtx, cancel := context.WithCancel(appCtx)
@@ -119,26 +101,30 @@ func main() {
 	// No profile selected
 	if len(ssoProfile) == 0 {
 		awsCfg, err = config.LoadDefaultConfig(context.TODO(), config.WithRegion("eu-west-3"))
-		checkErrorAndExitIfErr(err)
+		checkErrorAndExitIfErr(err, appLog)
 	} else {
 		// Try to connect with the SSO profile put in parameter
 		awsCfg, err = config.LoadDefaultConfig(
 			context.TODO(),
 			config.WithSharedConfigProfile(ssoProfile),
 		)
-		checkErrorAndExitIfErr(err)
+		checkErrorAndExitIfErr(err, appLog)
 	}
-	printID(awsCfg)
+	printID(awsCfg, appLog)
 	application = app.New(appCtx, configApp, awsCfg, 3600, appLog) // 3600 is the number of second since now to parse logs
 
 	err = application.LoadRules()
 	if err != nil {
-		appLog.Errorln(err)
-		appLog.Errorln("Cannot load rules...")
+		appLog.Error("error occured", slog.String("error", err.Error()))
+		appLog.Error("Cannot load rules...")
 		os.Exit(1)
 	}
 
-	// mainRoutine() // TO DELETE
+	if ssoProfile != "" {
+		appLog.Info("Using SSO profile", slog.String("profile", ssoProfile))
+		mainRoutine()
+		os.Exit(0)
+	}
 
 	c := cron.New()
 	// second minute hour day month
@@ -161,11 +147,11 @@ func mainRoutine() {
 	// 	stop = make(chan interface{})
 	// 	go app.PrintMemoryStats(stop)
 	// }
-	logrus.Debugln("Start Logcheck")
+	application.GetLogger().Debug("Start Logcheck")
 	err := application.LogCheck(appCtx)
 	if err != nil {
-		logrus.Errorln(err.Error())
+		application.GetLogger().Error(err.Error())
 		os.Exit(1)
 	}
-	logrus.Debugln("End Logcheck")
+	application.GetLogger().Debug("End Logcheck")
 }

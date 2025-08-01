@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
@@ -17,12 +19,12 @@ func (a *App) findLogGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupNam
 		params.NextToken = &NextToken
 	}
 	if err := a.logGroupRateLimit.Wait(context.TODO()); err != nil {
-		a.appLog.Errorln("Rate limit error:", err.Error())
+		a.appLog.Error("Rate limit error", slog.String("error", err.Error()))
 		return false
 	}
 	res, err := clientCloudwatchlogs.DescribeLogGroups(context.TODO(), &params)
 	if err != nil {
-		a.appLog.Errorln(err.Error())
+		a.appLog.Error(err.Error())
 		os.Exit(1)
 	}
 	for _, i := range res.LogGroups {
@@ -38,8 +40,39 @@ func (a *App) findLogGroup(clientCloudwatchlogs *cloudwatchlogs.Client, groupNam
 	return a.findLogGroup(clientCloudwatchlogs, groupName, *res.NextToken)
 }
 
+// streamEvents holds events grouped by log stream (like original behavior)
+type streamEvents struct {
+	streamName          string
+	firstContainerInfo  containerInfo // Info from first non-ignored container encountered
+	events              []logEvent
+	hasIgnoredContainer bool // If true, skip this entire stream
+}
+
+// containerInfo holds container metadata
+type containerInfo struct {
+	podName        string
+	containerImage string
+	containerName  string
+}
+
+// logEvent represents a single log event with its timestamp
+type logEvent struct {
+	timestamp int64
+	message   string
+}
+
+// CloudWatchLogsFilterClient interface for testing
+type CloudWatchLogsFilterClient interface {
+	FilterLogEvents(ctx context.Context, params *cloudwatchlogs.FilterLogEventsInput, optFns ...func(*cloudwatchlogs.Options)) (*cloudwatchlogs.FilterLogEventsOutput, error)
+}
+
 // parseAllEventsWithFilter uses FilterLogEvents API for improved performance
 func (a *App) parseAllEventsWithFilter(ctx context.Context, clientCloudwatchlogs *cloudwatchlogs.Client, groupName string, minTimeStamp int64, maxTimeStamp int64, chLogLines chan<- string) (int, error) {
+	return a.parseAllEventsWithFilterClient(ctx, clientCloudwatchlogs, groupName, minTimeStamp, maxTimeStamp, chLogLines)
+}
+
+// parseAllEventsWithFilterClient is the testable version that takes an interface
+func (a *App) parseAllEventsWithFilterClient(ctx context.Context, client CloudWatchLogsFilterClient, groupName string, minTimeStamp int64, maxTimeStamp int64, chLogLines chan<- string) (int, error) {
 	var cptLinePrinted int
 
 	// Set up FilterLogEvents input parameters
@@ -50,19 +83,17 @@ func (a *App) parseAllEventsWithFilter(ctx context.Context, clientCloudwatchlogs
 		Interleaved:  &[]bool{true}[0], // Sort events from multiple streams by timestamp
 	}
 
-	a.appLog.Debugf("Starting FilterLogEvents for group %s with time range %d-%d", groupName, minTimeStamp, maxTimeStamp)
-
-	// Create paginator for handling large result sets
-	paginator := cloudwatchlogs.NewFilterLogEventsPaginator(clientCloudwatchlogs, input)
+	a.appLog.Debug("Starting FilterLogEvents", slog.String("groupName", groupName), slog.Int64("minTimeStamp", minTimeStamp), slog.Int64("maxTimeStamp", maxTimeStamp))
 
 	eventCount := 0
 	pageCount := 0
-	
-	// Keep track of containers we've already printed headers for
-	containersPrinted := make(map[string]bool)
 
-	// Process all pages of results
-	for paginator.HasMorePages() {
+	// Group events by stream to maintain original behavior
+	streamGroups := make(map[string]*streamEvents)
+
+	// Process all pages of results manually
+	var nextToken *string
+	for {
 		// Check context cancellation
 		select {
 		case <-ctx.Done():
@@ -75,69 +106,133 @@ func (a *App) parseAllEventsWithFilter(ctx context.Context, clientCloudwatchlogs
 			return cptLinePrinted, fmt.Errorf("rate limit wait error: %w", err)
 		}
 
+		// Set next token if we have one
+		if nextToken != nil {
+			input.NextToken = nextToken
+		}
+
 		// Get next page of events
-		output, err := paginator.NextPage(ctx)
+		output, err := client.FilterLogEvents(ctx, input)
 		if err != nil {
 			return cptLinePrinted, fmt.Errorf("failed to filter log events: %w", err)
 		}
 
 		pageCount++
-		a.appLog.Debugf("Processing page %d with %d events", pageCount, len(output.Events))
+		a.appLog.Debug("Processing page", slog.Int("pageCount", pageCount), slog.Int("eventsCount", len(output.Events)))
+
+		// If no events and no next token, we're done
+		if len(output.Events) == 0 && output.NextToken == nil {
+			break
+		}
 
 		// Process events in this page
 		for _, event := range output.Events {
 			eventCount++
-			
+
 			var lineOfLog fluentDockerLog
 			err := json.Unmarshal([]byte(*event.Message), &lineOfLog)
 			if err != nil {
-				a.appLog.Errorln("Failed to parse log event:", err.Error())
+				a.appLog.Error("Failed to parse log event", slog.String("error", err.Error()))
 				continue
 			}
 
+			// Get or create stream group
+			streamName := *event.LogStreamName
+			stream, exists := streamGroups[streamName]
+			if !exists {
+				stream = &streamEvents{
+					streamName:          streamName,
+					events:              make([]logEvent, 0),
+					hasIgnoredContainer: false,
+				}
+				streamGroups[streamName] = stream
+				a.appLog.Debug("New stream group", slog.String("streamName", streamName))
+			}
+
 			// Check if this line matches any rules
-			if !isLineMatchWithOneRule(lineOfLog.Log, a.rules) {
+			if !a.isLineMatchWithOneRule(lineOfLog.Log, a.rules) {
 				// Check if this container/image should be ignored
 				imageIgnored := a.isImageIgnored(lineOfLog.Kubernetes.ContainerImage)
 				containerIgnored := a.isContainerIgnored(lineOfLog.Kubernetes.ContainerName)
 
-				if !imageIgnored && !containerIgnored {
-					// Create a unique key for this container
-					containerKey := fmt.Sprintf("%s|%s|%s", 
-						lineOfLog.Kubernetes.ContainerImage,
-						lineOfLog.Kubernetes.ContainerName,
-						*event.LogStreamName)
-
-					// Print container info if we haven't already
-					if !containersPrinted[containerKey] {
-						a.appLog.Debugf("Parse stream=%v containerImage=%v containerName=%v\n", 
-							*event.LogStreamName, lineOfLog.Kubernetes.ContainerImage, lineOfLog.Kubernetes.ContainerName)
-						chLogLines <- "<b>Parse stream</b> :" + *event.LogStreamName + "<br>"
-						chLogLines <- "<b>Container Image</b> :" + lineOfLog.Kubernetes.ContainerImage + "<br>"
-						chLogLines <- "<b>Container Name</b> :" + lineOfLog.Kubernetes.ContainerName + "<br>"
-						containersPrinted[containerKey] = true
+				if imageIgnored || containerIgnored {
+					// Mark this stream as having ignored containers (like old break behavior)
+					stream.hasIgnoredContainer = true
+					a.appLog.Debug("Stream marked as ignored", slog.String("streamName", streamName), slog.String("containerImage", lineOfLog.Kubernetes.ContainerImage), slog.String("containerName", lineOfLog.Kubernetes.ContainerName))
+				} else {
+					// Set first container info if not set yet (for headers)
+					if stream.firstContainerInfo.containerImage == "" {
+						stream.firstContainerInfo = containerInfo{
+							podName:        lineOfLog.Kubernetes.PodName,
+							containerImage: lineOfLog.Kubernetes.ContainerImage,
+							containerName:  lineOfLog.Kubernetes.ContainerName,
+						}
 					}
 
-					// Print the log line
-					timeT := time.Unix(*event.Timestamp/1000, 0).UTC()
-					chLogLines <- fmt.Sprintf("%s UTC: %s<br>\n", timeT.Format("2006-01-02 15:04:05"), lineOfLog.Log)
-					cptLinePrinted++
+					// Add event to the stream
+					stream.events = append(stream.events, logEvent{
+						timestamp: *event.Timestamp,
+						message:   lineOfLog.Log,
+					})
 				}
 			}
 		}
 
 		// Update progress periodically
 		if eventCount%1000 == 0 {
-			a.appLog.Debugf("Processed %d events so far...", eventCount)
+			a.appLog.Debug("Processed events", slog.Int("eventCount", eventCount))
+		}
+
+		// Set next token for next iteration, break if no more pages
+		nextToken = output.NextToken
+		if nextToken == nil {
+			break
 		}
 	}
 
-	// Add line breaks between different containers
-	for range containersPrinted {
+	// Sort stream keys for consistent output
+	streamKeys := make([]string, 0, len(streamGroups))
+	for key := range streamGroups {
+		streamKeys = append(streamKeys, key)
+	}
+	sort.Strings(streamKeys)
+
+	// Output events grouped by stream (like original behavior)
+	for _, streamKey := range streamKeys {
+		stream := streamGroups[streamKey]
+
+		// Skip streams that have ignored containers (like original break behavior)
+		if stream.hasIgnoredContainer {
+			a.appLog.Debug("Skipping stream due to ignored containers", slog.String("streamKey", streamKey))
+			continue
+		}
+
+		// Skip streams with no events
+		if len(stream.events) == 0 {
+			continue
+		}
+
+		// Print stream header (like original code - once per stream)
+		chLogLines <- "<b>Parse stream</b> :" + stream.streamName + "<br>"
+		chLogLines <- "<b>Container Image</b> :" + stream.firstContainerInfo.containerImage + "<br>"
+		chLogLines <- "<b>Container Name</b> :" + stream.firstContainerInfo.containerName + "<br>"
+
+		// Sort events within the stream by timestamp
+		sort.Slice(stream.events, func(i, j int) bool {
+			return stream.events[i].timestamp < stream.events[j].timestamp
+		})
+
+		// Print all events for this stream (all containers mixed chronologically)
+		for _, event := range stream.events {
+			timeT := time.Unix(event.timestamp/1000, 0).UTC()
+			chLogLines <- fmt.Sprintf("%s UTC: %s<br>\n", timeT.Format("2006-01-02 15:04:05"), event.message)
+			cptLinePrinted++
+		}
+
+		// Add separator between streams (like original code)
 		chLogLines <- "<br>\n"
 	}
 
-	a.appLog.Debugf("Completed FilterLogEvents processing: %d total events, %d lines printed, from %d pages", 
-		eventCount, cptLinePrinted, pageCount)
+	a.appLog.Debug("Completed FilterLogEvents processing", slog.Int("totalEvents", eventCount), slog.Int("linesPrinted", cptLinePrinted), slog.Int("pages", pageCount), slog.Int("streams", len(streamGroups)))
 	return cptLinePrinted, nil
 }

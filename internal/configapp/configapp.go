@@ -2,10 +2,10 @@ package configapp
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
 
@@ -49,13 +49,13 @@ func ReadYamlCnxFile(filename string) (AppConfig, error) {
 
 	yamlFile, err := os.ReadFile(filename)
 	if err != nil {
-		logrus.Errorf("Error reading YAML file: %s\n", err)
+		fmt.Fprintf(os.Stderr, "Error reading YAML file: %s\n", err)
 		return config, err
 	}
 
 	err = yaml.Unmarshal(yamlFile, &config)
 	if err != nil {
-		logrus.Errorf("Error parsing YAML file: %s\n", err)
+		fmt.Fprintf(os.Stderr, "Error parsing YAML file: %s\n", err)
 		return config, err
 	}
 	return config, err
