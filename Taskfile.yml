@@ -23,11 +23,8 @@ tasks:
     - snapshot
     cmds:
       - docker push ghcr.io/sgaunet/awslogcheck:latest-amd64
-      - docker push ghcr.io/sgaunet/awslogcheck:latest-arm64v8
-      - docker push ghcr.io/sgaunet/awslogcheck:latest-armv6
-      - docker push ghcr.io/sgaunet/awslogcheck:latest-armv7
-      - docker manifest create --amend ghcr.io/sgaunet/awslogcheck:latest ghcr.io/sgaunet/awslogcheck:latest-amd64 ghcr.io/sgaunet/awslogcheck:latest-arm64v8 ghcr.io/sgaunet/awslogcheck:latest-armv6 ghcr.io/sgaunet/awslogcheck:latest-armv7
-      - docker manifest push ghcr.io/sgaunet/awslogcheck:latest
+      - docker tag  ghcr.io/sgaunet/awslogcheck:latest-amd64 ghcr.io/sgaunet/awslogcheck:latest
+      - docker push ghcr.io/sgaunet/awslogcheck:latest
 
   snapshot:
     desc: "Create a snapshot release"

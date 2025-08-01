@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"sync"
 
@@ -18,7 +19,7 @@ func (a *App) LogCheck(ctx context.Context) error {
 	LogGroupExists := a.findLogGroup(clientCloudwatchlogs, a.cfg.LogGroup, "")
 	if !LogGroupExists {
 		err := fmt.Errorf("a.cfg.LogGroup %s not found", a.cfg.LogGroup)
-		a.appLog.Errorln(err.Error())
+		a.appLog.Error(err.Error())
 		return err
 	}
 
@@ -26,16 +27,16 @@ func (a *App) LogCheck(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	a.appLog.Debugln("minTimeStampsInMs=", minTimeStampInMs)
-	a.appLog.Debugln("maxTimeStampsInMs=", maxTimeStampInMs)
+	a.appLog.Debug("minTimeStampsInMs", slog.Int64("value", minTimeStampInMs))
+	a.appLog.Debug("maxTimeStampsInMs", slog.Int64("value", maxTimeStampInMs))
 
 	wg.Add(1)
 	go a.collectLinesOfReportAndSendReport(ctx, &wg, chLogLines)
-	
+
 	// Use the new FilterLogEvents API for better performance
 	_, err = a.parseAllEventsWithFilter(ctx, clientCloudwatchlogs, a.cfg.LogGroup, minTimeStampInMs, maxTimeStampInMs, chLogLines)
 	close(chLogLines)
-	
+
 	wg.Wait()
 	return err
 }
@@ -51,8 +52,8 @@ func (a *App) GetTimeStampMsRangeofLastHour() (begin int64, end int64, err error
 		return
 	}
 	end = endTime.Unix() * 1000
-	a.appLog.Debugln("beginTime=", beginTime)
-	a.appLog.Debugln("endTime=", endTime)
+	a.appLog.Debug("beginTime", slog.Time("value", beginTime))
+	a.appLog.Debug("endTime", slog.Time("value", endTime))
 	return
 }
 
@@ -61,10 +62,11 @@ func (a *App) collectLinesOfReportAndSendReport(ctx context.Context, wg *sync.Wa
 	defer wg.Done()
 	emptyReport := true // used to know if report has to be sent or not
 	reportFilename := "/tmp/report.html"
-	a.appLog.Debugln("create report")
+	a.appLog.Debug("create report")
 	f, err := os.Create(reportFilename)
 	if err != nil {
-		a.appLog.Fatalln(err)
+		a.appLog.Error("Failed to create report file", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 	sizeFile := 0
 
@@ -73,7 +75,7 @@ loop:
 		line, ok := <-chLines
 		if !ok {
 			// channel closed
-			a.appLog.Debugln("channel closed")
+			a.appLog.Debug("channel closed")
 			break loop
 		}
 		emptyReport = false
@@ -81,23 +83,24 @@ loop:
 		sizeFile = sizeFile + len(line)
 
 		if sizeFile > a.cfg.SmtpConfig.MaxReportSize {
-			a.appLog.Debugln("size > MaxReportSize")
+			a.appLog.Debug("size > MaxReportSize")
 			emptyReport = true
 			f.Close()
-			a.appLog.Debugln("send report *")
+			a.appLog.Debug("send report *")
 			err = a.SendReport(reportFilename)
 			if err != nil {
-				a.appLog.Errorln(err)
+				a.appLog.Error("Error occurred", slog.String("error", err.Error()))
 			}
-			a.appLog.Debugln("remove report")
+			a.appLog.Debug("remove report")
 			err = os.Remove(reportFilename)
 			if err != nil {
-				a.appLog.Errorln(err)
+				a.appLog.Error("Error occurred", slog.String("error", err.Error()))
 			}
-			a.appLog.Debugln("create report")
+			a.appLog.Debug("create report")
 			f, err = os.Create(reportFilename)
 			if err != nil {
-				a.appLog.Fatalln(err)
+				a.appLog.Error("Failed to create report file", slog.String("error", err.Error()))
+				os.Exit(1)
 			}
 			sizeFile = 0
 		}
@@ -106,16 +109,17 @@ loop:
 	f.Close()
 
 	if !emptyReport {
-		a.appLog.Debugln("send report")
+		a.appLog.Debug("send report")
 		err = a.SendReport(reportFilename)
 		if err != nil {
-			a.appLog.Errorln(err)
+			a.appLog.Error("Error occurred", slog.String("error", err.Error()))
 		}
 	}
-	a.appLog.Debugln("remove report")
+	a.appLog.Debug("remove report")
 	err = os.Remove(reportFilename)
 	if err != nil {
-		a.appLog.Errorln(err)
+		a.appLog.Error("Error occurred", slog.String("error", err.Error()))
 	}
-	a.appLog.Debugln("end")
+	a.appLog.Debug("report filepath", slog.String("path", reportFilename))
+	a.appLog.Debug("end")
 }
