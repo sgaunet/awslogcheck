@@ -13,7 +13,7 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/sgaunet/calcdate/calcdate v0.0.0-20220108124356-12ceff09b8d0
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/time v0.11.0
+	golang.org/x/time v0.12.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
