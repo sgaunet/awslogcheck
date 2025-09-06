@@ -10,6 +10,12 @@ tasks:
     cmds:
       - task -a
 
+  linter:
+    desc: "Run linter"
+    cmds:
+      - go generate ./...
+      - golangci-lint run
+
   build:
     desc: "Build binary"
     cmds:
@@ -34,4 +40,4 @@ tasks:
   release:
     desc: "Create a release"
     cmds:
-      - GITLAB_TOKEN="" goreleaser --clean --skip validate
+      - GITLAB_TOKEN="" goreleaser --clean
