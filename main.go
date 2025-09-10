@@ -1,9 +1,11 @@
+// Package main is the entry point for awslogcheck application.
 package main
 
 import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -20,7 +22,12 @@ import (
 	"github.com/robfig/cron"
 )
 
-const ingestionTimeS int = 120
+const (
+	ingestionTimeS = 120
+	lastPeriodSeconds = 3600
+	signalChannelSize = 5
+	exitWaitSeconds = 1
+)
 
 func initTrace(debugLevel string) *slog.Logger {
 	appLog := logger.NewLogger(debugLevel)
@@ -29,12 +36,12 @@ func initTrace(debugLevel string) *slog.Logger {
 
 func checkErrorAndExitIfErr(err error, logger *slog.Logger) {
 	if err != nil {
-		logger.Error("error occured", slog.String("error", err.Error()))
+		logger.Error("error occurred", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 }
 
-// print AWS identity
+// print AWS identity.
 func printID(cfg aws.Config, logger *slog.Logger) {
 	client := sts.NewFromConfig(cfg)
 	identity, err := client.GetCallerIdentity(
@@ -47,7 +54,7 @@ func printID(cfg aws.Config, logger *slog.Logger) {
 	logger.Info("", slog.String("arn", aws.ToString(identity.Arn)))
 }
 
-var version string = "development"
+var version = "development"
 var application *app.App
 var awsCfg aws.Config // Configuration to connect to AWS API
 var appCtx context.Context
@@ -56,54 +63,38 @@ func printVersion() {
 	fmt.Println(version)
 }
 
-func main() {
-	// var cptLinePrinted int
+func parseCommandLineArgs() (bool, string, string) {
 	var vOption bool
-	var ssoProfile string
-	var err error
-	var configFilename string
-	var configApp configapp.AppConfig
-	sigs := make(chan os.Signal, 5)
-	appLog := initTrace("")
-
-	// Treat args
+	var ssoProfile, configFilename string
 	flag.BoolVar(&vOption, "v", false, "Get version")
 	flag.StringVar(&ssoProfile, "p", "", "Auth by SSO")
 	flag.StringVar(&configFilename, "c", "", "Directory containing patterns to ignore")
 	flag.Parse()
+	return vOption, ssoProfile, configFilename
+}
 
-	if vOption {
-		printVersion()
-		os.Exit(0)
-	}
-
+func loadConfiguration(configFilename string, appLog *slog.Logger) configapp.AppConfig {
 	if configFilename == "" {
 		fmt.Fprintf(os.Stderr, "ERROR: configuration file is mandatory\n")
 		os.Exit(1)
 	}
-	if configFilename != "" {
-		configApp, err = configapp.ReadYamlCnxFile(configFilename)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: %v\n", err.Error())
-			appLog.Error("Cannot read configuration file", slog.String("filename", configFilename))
-			appLog.Error("Please check the file and try again")
-			os.Exit(1)
-		}
+	
+	configApp, err := configapp.ReadYamlCnxFile(configFilename)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err.Error())
+		appLog.Error("Cannot read configuration file", slog.String("filename", configFilename))
+		appLog.Error("Please check the file and try again")
+		os.Exit(1)
 	}
+	return configApp
+}
 
-	appLog = initTrace(configApp.DebugLevel)
-	appLog.Info("Log level set", slog.String("level", configApp.DebugLevel))
-	appLog.Debug("Log group configured", slog.String("loggroup", configApp.LogGroup))
-
-	appCtx = context.Background()
-	appCtx, cancel := context.WithCancel(appCtx)
-
-	// No profile selected
+func setupAWSConfig(ssoProfile string, appLog *slog.Logger) {
+	var err error
 	if len(ssoProfile) == 0 {
 		awsCfg, err = config.LoadDefaultConfig(context.TODO(), config.WithRegion("eu-west-3"))
 		checkErrorAndExitIfErr(err, appLog)
 	} else {
-		// Try to connect with the SSO profile put in parameter
 		awsCfg, err = config.LoadDefaultConfig(
 			context.TODO(),
 			config.WithSharedConfigProfile(ssoProfile),
@@ -111,11 +102,48 @@ func main() {
 		checkErrorAndExitIfErr(err, appLog)
 	}
 	printID(awsCfg, appLog)
-	application = app.New(appCtx, configApp, awsCfg, 3600, appLog) // 3600 is the number of second since now to parse logs
+}
 
-	err = application.LoadRules()
+func runCronMode(cancel context.CancelFunc) {
+	sigs := make(chan os.Signal, signalChannelSize)
+	c := cron.New()
+	if err := c.AddFunc("0 0 * * *", mainRoutine); err != nil {
+		log.Fatalf("Failed to add cron job: %v", err)
+	}
+	c.Start()
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	<-sigs
+	cancel()
+	c.Stop()
+	time.Sleep(exitWaitSeconds * time.Second)
+}
+
+func main() {
+	appLog := initTrace("")
+	
+	vOption, ssoProfile, configFilename := parseCommandLineArgs()
+
+	if vOption {
+		printVersion()
+		os.Exit(0)
+	}
+
+	configApp := loadConfiguration(configFilename, appLog)
+	
+	appLog = initTrace(configApp.DebugLevel)
+	appLog.Info("Log level set", slog.String("level", configApp.DebugLevel))
+	appLog.Debug("Log group configured", slog.String("loggroup", configApp.LogGroup))
+
+	appCtx = context.Background()
+	appCtx, cancel := context.WithCancel(appCtx)
+
+	setupAWSConfig(ssoProfile, appLog)
+	
+	application = app.New(appCtx, configApp, awsCfg, lastPeriodSeconds, appLog)
+
+	err := application.LoadRules()
 	if err != nil {
-		appLog.Error("error occured", slog.String("error", err.Error()))
+		appLog.Error("error occurred", slog.String("error", err.Error()))
 		appLog.Error("Cannot load rules...")
 		os.Exit(1)
 	}
@@ -126,18 +154,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	c := cron.New()
-	// second minute hour day month
-	c.AddFunc("0 0 * * *", mainRoutine)
-	c.Start()
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	<-sigs
-	cancel()
-	c.Stop()
-	time.Sleep(1 * time.Second)
-	// buf := make([]byte, 1<<16)
-	// runtime.Stack(buf, true)
-	// fmt.Printf("%s", buf)
+	runCronMode(cancel)
 }
 
 func mainRoutine() {
